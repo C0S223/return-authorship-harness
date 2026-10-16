@@ -1,10 +1,17 @@
 # ONBOARDING.md: a short tour after setup
 
-**Reader: the agent.** Start this when the person says **onboard me**, or says yes to the
-session-start line that offers it. That line shows only while the push guard is armed
-(`APPROVED_ORIGIN_URL` in `.githooks/pre-push` is no longer the `OWNER/REPO` placeholder)
-and the checkout has no `grills/` and no `work/` folder. If setup is not finished, say so
-and offer `SETUP.md` instead.
+**Reader: the agent.** Start this whenever the person says **onboard me**, at any time,
+even after they have taken or skipped the tour before. A new session also offers it, in one
+session-start line, only when all three hold: the push guard is armed (`APPROVED_ORIGIN_URL`
+in `.githooks/pre-push` is no longer the `OWNER/REPO` placeholder), `.agent-log/onboarded`
+does not exist, and the session is not a cloud session (managed cloud or a self-hosted
+runner). A cloud session never shows that line, but **onboard me** works there too. If setup is not finished, say so and offer
+`SETUP.md` instead.
+
+**Ending or skipping.** At the end of step 6, or as soon as they say **skip** at any point,
+create the empty file `.agent-log/onboarded` (and the folder, if it is missing), and tell them plainly: it only stops the
+offer at the start of new sessions; it lives in a folder Git ignores, so nothing is
+committed; and saying **onboard me** still starts the tour.
 
 **How to run it.** One step per turn, one idea per message, in plain words. End each step
 with a plain question and wait for the reply. Put each step's text in your last message,
@@ -82,4 +89,5 @@ Ask for their goals first, frame-first (`graphs/grill.md` step 2): what they wan
 done, what done would look like, and what they are afraid of getting wrong. Offer no choices
 and no recommendation yet; get their own words and their own list onto the record. Then end
 by asking, as one pop-out, which of the things they named to work on first, the choices in
-their words. Nothing starts until they pick; a build then opens a lane (step 3 above).
+their words. Nothing starts until they pick; a build then opens a lane (step 3 above). Then create the
+marker file (Ending or skipping, above).

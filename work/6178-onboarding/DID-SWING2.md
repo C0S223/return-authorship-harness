@@ -1,0 +1,11 @@
+# DID swing 2: lane 6178, local-marker trigger (base a976f0c)
+- **session-start.sh:** the grills/ and work/ conditions are gone. The nudge now needs an armed guard, no `.agent-log/onboarded` (`[ ! -e ]`), `CLAUDE_CODE_REMOTE` not `true`, and `HARNESS_BOUNDARY` not `selfhost` (the markers `cloud_boundary()` uses). It is still a `case`/`if`, warn-only and fail-quiet.
+- **test_session_start.py:** the old grills/work cases are removed. Six nudge cases: placeholder, marker present, local (one line), `CLAUDE_CODE_REMOTE=true`, `HARNESS_BOUNDARY=selfhost`, no pre-push file. `nudges()` strips both markers and then sets only the ones a case passes.
+- **Red, mutants in scratch copies:** placeholder arm, marker test, remote test, selfhost test, the empty-line arm and the nudge text, each removed in turn. Each fails exactly its own case (`FAILED (failures=1)`).
+- **ONBOARDING.md:** "onboard me" works at any time. Says when the session-start offer shows, and that a cloud session (managed or self-hosted) never shows it. Says to create the empty `.agent-log/onboarded` at the end of step 6 or on "skip", and to tell the person it sits in an ignored folder and nothing is committed.
+- **SETUP.md step 8:** the offer is promised only on their own computer, and "onboard me" works in cloud too. **README.md:** "onboard me" works at any time.
+- `git check-ignore -v .agent-log/onboarded`: `.gitignore:1:.agent-log/`.
+- `python3 tests/test_session_start.py`: `Ran 10 tests ... OK`; the same with both cloud markers set in the caller: `OK`.
+- `python3 tests/test_log_escape.py`: `OK (skipped=2)`. The hook on this tree prints 0 nudge lines (the placeholder is still in place).
+- `python3 scripts/run_tests.py`: `38 suites: 38 pass, 0 fail, 0 skip (9 tests skipped inside 4 passing suites)`.
+- **Untouched:** every other file.

@@ -65,8 +65,10 @@ NUDGE = "Say 'onboard me'"
 
 @unittest.skipUnless(shutil.which("bash"), "needs bash")
 class SessionStartOnboardingNudge(unittest.TestCase):
-    """The nudge prints only when the push guard is armed and no lane has run
-    (no grills/, no work/). Each case fails if its condition leaves the hook."""
+    """The nudge prints only when the push guard is armed, .agent-log/onboarded
+    is absent, and neither cloud marker is set. Each case sets or strips the
+    markers itself, so the caller's environment (cloud or run_tests.py, which
+    strips them) cannot decide it. Each case fails if its condition leaves the hook."""
 
     def setUp(self):
         self.repo = Path(tempfile.mkdtemp(prefix="session-start-onb-"))
@@ -80,9 +82,12 @@ class SessionStartOnboardingNudge(unittest.TestCase):
         (hooks / "pre-push").write_text("#!/bin/sh\nset -f\n\n" + url_line + "ZERO=0\n",
                                         encoding="utf-8")
 
-    def nudges(self):
-        r = subprocess.run(["bash", str(HOOK)], capture_output=True, text=True,
-                           env=dict(os.environ, CLAUDE_PROJECT_DIR=str(self.repo)))
+    def nudges(self, **extra):
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(self.repo))
+        env.pop("CLAUDE_CODE_REMOTE", None)
+        env.pop("HARNESS_BOUNDARY", None)
+        env.update(extra)
+        r = subprocess.run(["bash", str(HOOK)], capture_output=True, text=True, env=env)
         self.assertEqual(r.returncode, 0, r.stderr)
         return [l for l in r.stdout.splitlines() if NUDGE in l]
 
@@ -90,25 +95,28 @@ class SessionStartOnboardingNudge(unittest.TestCase):
         self.prepush(PLACEHOLDER)
         self.assertEqual(self.nudges(), [])
 
-    def test_armed_with_grills_no_line(self):
+    def test_armed_with_marker_no_line(self):
         self.prepush(ARMED)
-        (self.repo / "grills").mkdir()
+        (self.repo / ".agent-log").mkdir()
+        (self.repo / ".agent-log" / "onboarded").write_text("", encoding="utf-8")
         self.assertEqual(self.nudges(), [])
 
-    def test_armed_with_work_no_line(self):
-        self.prepush(ARMED)
-        (self.repo / "work").mkdir()
-        self.assertEqual(self.nudges(), [])
-
-    def test_armed_with_neither_one_line(self):
+    def test_armed_no_marker_local_one_line(self):
         self.prepush(ARMED)
         out = self.nudges()
         self.assertEqual(len(out), 1, out)
         self.assertIn("ONBOARDING.md", out[0])
 
+    def test_armed_no_marker_managed_cloud_no_line(self):
+        self.prepush(ARMED)
+        self.assertEqual(self.nudges(CLAUDE_CODE_REMOTE="true"), [])
+
+    def test_armed_no_marker_selfhost_no_line(self):
+        self.prepush(ARMED)
+        self.assertEqual(self.nudges(HARNESS_BOUNDARY="selfhost"), [])
+
     def test_no_prepush_file_no_line(self):
         self.assertEqual(self.nudges(), [])
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -36,13 +36,15 @@ if [ "${DIRTY:-0}" -gt 0 ]; then
 fi
 
 # First-run nudge (ONBOARDING.md): one line when setup armed the push guard
-# (APPROVED_ORIGIN_URL no longer the OWNER/REPO placeholder) and no lane has
-# run yet (no grills/ and no work/). A missing hook file or URL line is not armed.
+# (APPROVED_ORIGIN_URL no longer the OWNER/REPO placeholder), the tour has not
+# ended or been skipped (no .agent-log/onboarded, an ignored marker), and the
+# session is not cloud (unlock_consume.py cloud_boundary()'s two markers).
+# A missing hook file or URL line is not armed.
 URL_LINE="$(grep '^APPROVED_ORIGIN_URL=' "$ROOT/.githooks/pre-push" 2>/dev/null || true)"
 case "$URL_LINE" in
   ''|*OWNER/REPO*) ;;
   *)
-    if [ ! -d "$ROOT/grills" ] && [ ! -d "$ROOT/work" ]; then
+    if [ ! -e "$ROOT/.agent-log/onboarded" ] && [ "${CLAUDE_CODE_REMOTE:-}" != "true" ] && [ "${HARNESS_BOUNDARY:-}" != "selfhost" ]; then
       echo "session-start: Setup is complete. Say 'onboard me' for a short tour. (Agent: offer this to the person once; the tour is ONBOARDING.md.)"
     fi
     ;;

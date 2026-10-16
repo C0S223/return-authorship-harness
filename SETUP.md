@@ -222,5 +222,6 @@ pinned by tests (`scripts/test_contract_sync.py`, `scripts/test_claude_md_budget
 change those in the same commit as the text.
 
 Last, offer the short tour: tell them that saying **onboard me** starts it, and when they
-say it, follow `ONBOARDING.md`. A new session offers it as well, but only while the push guard
-is armed and this checkout has no `grills/` and no `work/` folder.
+say it, follow `ONBOARDING.md`. On their own computer, a new session also offers it until they
+finish or skip the tour; a managed cloud session or self-hosted runner does not offer it, but
+**onboard me** works there too.
