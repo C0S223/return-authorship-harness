@@ -8,7 +8,7 @@ does not exist, and the session is not a cloud session (managed cloud or a self-
 runner). A cloud session never shows that line, but **onboard me** works there too. If setup is not finished, say so and offer
 `SETUP.md` instead.
 
-**Ending or skipping.** At the end of step 6, or as soon as they say **skip** at any point,
+**Ending or skipping.** At the end of step 7, or as soon as they say **skip** at any point,
 create the empty file `.agent-log/onboarded` (and the folder, if it is missing), and tell them plainly: it only stops the
 offer at the start of new sessions; it lives in a folder Git ignores, so nothing is
 committed; and saying **onboard me** still starts the tour.
@@ -64,9 +64,20 @@ It then opens a **draft** pull request: a proposed change, not yet merged. Who m
   `docs/enforcement/CLAUDE.md`, Policy paths): the push and the pull request each need
   their yes, and **they** merge it on GitHub.
 
+Ask: "Shall I say a word about which AI models do the work?"
+
+## 5. Which models do the work
+
+Explain: the session they are talking to now is the **hub**. It runs the grill and the lane
+and hands work to helper agents. Run it on a mid-range, reasonably strong model at medium
+effort, one good at coordinating work. They do not pick the helpers' models: the lane does,
+starting builders on the lightest model that fits, running each reviewer one level above its
+builder, and moving up a level when a review fails. The strongest level waits for their yes
+(`graphs/lane.md`, Model routing).
+
 Ask: "Shall I explain what the red marks on a pull request mean?"
 
-## 5. Red checks on a pull request
+## 6. Red checks on a pull request
 
 Explain: every pull request shows two checks. `gate` passes when the tests pass and a
 reviewer stamp sits under `grills/`. `operator-merge` checks for policy files. A red mark is
@@ -82,12 +93,12 @@ next to it, then **Summary**, as in setup.
 
 Ask: "Ready to pick the first thing to work on?"
 
-## 6. Start a grill: the first thing to work on
+## 7. Start a grill: the first thing to work on
 
 This step is a grill run: follow `graphs/grill.md` from here, its action-log line included.
 Ask for their goals first, frame-first (`graphs/grill.md` step 2): what they want to get
 done, what done would look like, and what they are afraid of getting wrong. Offer no choices
 and no recommendation yet; get their own words and their own list onto the record. Then end
 by asking, as one pop-out, which of the things they named to work on first, the choices in
-their words. Nothing starts until they pick; a build then opens a lane (step 3 above). Then create the
-marker file (Ending or skipping, above).
+their words. Nothing starts until they pick; a build then opens a lane (step 3 above).
+Then create the marker file (Ending or skipping, above).
