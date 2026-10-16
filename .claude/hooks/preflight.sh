@@ -15,8 +15,8 @@
 #   bash "$f" "$CLAUDE_PROJECT_DIR/.claude/hooks/<x>.py"
 # Every quoted "$CLAUDE_PROJECT_DIR/..." path in a command must be a file; a
 # command naming none is unreadable and blocks. Any command using run-python.sh
-# needs a python3 or python that really is Python 3, probed as the launcher
-# does. Every command's interpreter must also resolve, as before lane 6175:
+# needs a python3 or python that really is Python 3.10 or newer, probed as the
+# launcher does (an older python3 ahead of a newer python is skipped). Every command's interpreter must also resolve, as before lane 6175:
 # the first word after the guard, or the first word of an unguarded command,
 # so a bare `python "..."` row on a machine without `python` still blocks.
 # The commands are read with jq (session-close and log-escape need it too, so
@@ -68,12 +68,12 @@ if [ -n "$need_python" ]; then
   py_ok=""
   for py in python3 python; do
     command -v "$py" >/dev/null 2>&1 || continue
-    if "$py" -c 'import sys; sys.exit(sys.version_info[0] != 3)' </dev/null >/dev/null 2>&1; then
+    if "$py" -c 'import sys; sys.exit(sys.version_info < (3, 10))' </dev/null >/dev/null 2>&1; then
       py_ok=1
       break
     fi
   done
-  [ -n "$py_ok" ] || fail="$fail\n  no Python 3 found (tried python3, then python): install Python 3, then restart Claude Code"
+  [ -n "$py_ok" ] || fail="$fail\n  no Python 3.10 or newer found (tried python3, then python): install Python 3.10 or newer, then restart Claude Code"
 fi
 
 if [ -n "$fail" ]; then

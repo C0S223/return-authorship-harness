@@ -18,6 +18,21 @@ ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 # jq; only a positive non-logged class exits early. Measured
 # 2026-09-10: this hook spent 155-170 ms on every Read/Grep/Edit call to learn
 # it had nothing to log, and PostToolUse was p50 914 ms of a real Bash call.
+# stamp: sets NOW (HH:MM:SS) and DAY (YYYY-MM-DD), local time, with `date`.
+# Bash's own clock format in printf needs bash 4.2; macOS's /bin/bash is 3.2, the
+# printf failed, the ERR trap above exited 0, and pushes, gh calls, spawns and
+# web calls logged nothing. Bash 3.2 syntax is all this file may use
+# (tests/test_log_escape.py scans for later syntax). A failed or odd `date`
+# still logs, at a placeholder time in undated.md, rather than drop the line.
+stamp() {
+  local ts
+  ts="$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null)" || ts=""
+  case "$ts" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\ [0-9][0-9]:[0-9][0-9]:[0-9][0-9])
+      DAY="${ts%% *}"; NOW="${ts#* }" ;;
+    *) DAY="undated"; NOW="??:??:??" ;;
+  esac
+}
 fast() { :; }; [ -f "$ROOT/.claude/hooks/log-escape-fast.sh" ] && . "$ROOT/.claude/hooks/log-escape-fast.sh"
 INPUT=""
 IFS= read -r -d '' INPUT || true
@@ -36,7 +51,7 @@ if ! hash jq 2>/dev/null; then
       # A real payload opens with session_id and transcript_path, so the first
       # 160 bytes held no command (review SE-5): start at the first tool_input.
       [[ "$RAWL" =~ \"tool_input\"[[:space:]]*:[[:space:]]*(.*)$ ]] && RAWL="${BASH_REMATCH[1]}"
-      [ -d "$ROOT/.agent-log" ] || mkdir -p "$ROOT/.agent-log"; printf -v NOW '%(%T)T' -1; printf -v DAY '%(%F)T' -1
+      [ -d "$ROOT/.agent-log" ] || mkdir -p "$ROOT/.agent-log"; stamp
       printf -- '- %s [log-escape] UNPARSED (jq missing): %s %s\n' "$NOW" "${TOOL:-?}" "${RAWL:0:160}" >> "$ROOT/.agent-log/$DAY.md"
       ;;
   esac
@@ -137,6 +152,6 @@ case "$TOOL" in
 esac
 [ -z "$LINE" ] && exit 0
 
-[ -d "$ROOT/.agent-log" ] || mkdir -p "$ROOT/.agent-log"; printf -v NOW '%(%T)T' -1; printf -v DAY '%(%F)T' -1
+[ -d "$ROOT/.agent-log" ] || mkdir -p "$ROOT/.agent-log"; stamp
 printf -- '- %s [log-escape] %s\n' "$NOW" "$LINE" >> "$ROOT/.agent-log/$DAY.md"
 exit 0

@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -57,7 +58,7 @@ class LogEscapeCase(unittest.TestCase):
         # PATH holds only the tools the hook needs, jq left out (probe P1).
         bin_dir = self.root / "nojq-bin"
         bin_dir.mkdir()
-        for tool in ("bash", "mkdir", "tr", "sed", "cat", "python", "python3"):
+        for tool in ("bash", "mkdir", "tr", "sed", "cat", "date", "python", "python3"):
             found = shutil.which(tool)
             if found:
                 (bin_dir / tool).symlink_to(found)
@@ -78,6 +79,26 @@ class LogEscapeCase(unittest.TestCase):
         self.assertIn("git push origin lane", text)
         self.assertIn("UNPARSED (jq missing): Agent", text)
         self.assertNotIn("Read", text)    # a class the hook never logs stays silent
+
+    def test_the_line_carries_local_date_and_time(self):
+        # The stamp moved from bash's printf clock to `date` (board 6177).
+        before = time.strftime("%Y-%m-%d")
+        text = self.logged('{"tool_name":"Bash",%s}' % PUSH)
+        after = time.strftime("%Y-%m-%d")
+        names = sorted(p.name for p in (self.root / ".agent-log").glob("*.md"))
+        self.assertIn(names, (["%s.md" % before], ["%s.md" % after]))
+        self.assertRegex(text, r"^- \d\d:\d\d:\d\d \[log-escape\] push: git push origin lane\n$")
+
+    def test_a_failing_date_still_logs_the_line(self):
+        # The ERR trap stays, so a failed timestamp must not end the hook.
+        bin_dir = self.root / "baddate-bin"
+        bin_dir.mkdir()
+        (bin_dir / "date").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        (bin_dir / "date").chmod(0o755)
+        self.env["PATH"] = bin_dir.as_posix() + os.pathsep + self.env.get("PATH", "")
+        self.logged('{"tool_name":"Bash",%s}' % PUSH)
+        self.assertEqual((self.root / ".agent-log" / "undated.md").read_text(encoding="utf-8"),
+                         "- ??:??:?? [log-escape] push: git push origin lane\n")
 
     def test_a_push_is_logged(self):
         self.assertIn("push: git push origin lane",
@@ -285,6 +306,56 @@ class LogEscapeCase(unittest.TestCase):
                                    capture_output=True, env=self.env)
                 self.assertTrue(r.stdout.endswith(b"FAST=1"), r.stdout)
                 self.assertIn(b"TID='trig_abc'", r.stdout)
+
+
+# Bash syntax later than 3.2, which is macOS's /bin/bash: the printf clock
+# format silently disabled log-escape there (board 6177, item 1). Each entry is
+# (pattern, a line it must catch). Full-line comments are not scanned.
+LATER_THAN_BASH_3_2 = {
+    "printf clock format, 4.2": (r"%\([^)]*\)T", "printf -v NOW '%(%T)T' -1"),
+    "associative array, 4.0": (r"\b(declare|local|typeset)\s+-[a-zA-Z]*A", "local -A seen"),
+    "nameref, 4.3": (r"\b(declare|local|typeset)\s+-[a-zA-Z]*n\b", "local -n ref=x"),
+    "mapfile, readarray or coproc, 4.0": (r"\b(mapfile|readarray|coproc)\b", "mapfile -t L < f"),
+    "case modification, 4.0": (r"\$\{[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?(,,?|\^\^?)\}", 'x="${x,,}"'),
+    "parameter transformation, 4.4": (r"\$\{[^}]*@[QEPAaKkUuL]\}", 'echo "${x@Q}"'),
+    "[[ -v ]], 4.2": (r"\[\[\s+-v\s", "[[ -v X ]] || exit"),
+    "EPOCHSECONDS, EPOCHREALTIME or BASHPID": (r"\b(EPOCHSECONDS|EPOCHREALTIME|BASHPID)\b",
+                                              "NOW=$EPOCHSECONDS"),
+    "&>>, 4.0": (r"&>>", "echo x &>> f"),
+    "|&, 4.0": (r"\|&(?![]])", "cmd |& tee f"),
+    "case fall-through, 4.0": (r";;?&\s*($|#)", "a) x ;&"),
+    "negative substring length, 4.2": (r"\$\{[A-Za-z_][A-Za-z0-9_]*:[^}:]*:\s*-[0-9]",
+                                       'echo "${x:0:-1}"'),
+    "negative array index, 4.3": (r"\$\{[A-Za-z_][A-Za-z0-9_]*\[-[0-9]+\]\}", 'echo "${a[-1]}"'),
+    "globstar or lastpipe": (r"\bshopt\s+-s\s+[^;\n]*\b(globstar|lastpipe)\b", "shopt -s lastpipe"),
+    "wait -n, 4.3": (r"\bwait\s+-n\b", "wait -n"),
+}
+
+
+class HooksRunOnBash32(unittest.TestCase):
+    """Every shell hook keeps to bash 3.2 syntax.
+
+    No bash 3.2 runs here, so this is a scan, not an execution: it shows the
+    hooks need nothing a 3.2 shell lacks, from the list above. A construct the
+    list does not name is not caught."""
+
+    def test_each_pattern_catches_its_example(self):
+        for name, (pat, example) in LATER_THAN_BASH_3_2.items():
+            with self.subTest(name=name):
+                self.assertRegex(example, pat)
+
+    def test_no_hook_uses_syntax_later_than_bash_3_2(self):
+        hooks = sorted((REPO / ".claude" / "hooks").rglob("*.sh"))
+        self.assertIn("log-escape.sh", [h.name for h in hooks])
+        hits = []
+        for h in hooks:
+            for n, line in enumerate(h.read_text(encoding="utf-8").splitlines(), 1):
+                if line.lstrip().startswith("#"):
+                    continue
+                for name, (pat, _) in LATER_THAN_BASH_3_2.items():
+                    if re.search(pat, line):
+                        hits.append("%s:%d %s: %s" % (h.name, n, name, line.strip()[:80]))
+        self.assertEqual(hits, [])
 
 
 def scope_rules():
