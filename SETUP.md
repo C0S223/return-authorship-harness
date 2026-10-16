@@ -1,5 +1,8 @@
 # SETUP.md: setting this repository up with a person
 
+**Codex:** use `CODEX-SETUP.md` instead. The steps below depend on Claude Code
+registration and probe procedures. Codex has a separate adapter and activation guide.
+
 **Reader: the agent.** A person opened this repository in Claude Code and asked you to set
 it up. They may not be technical. Walk them through the steps below **one at a time**, in
 plain words. After each step, say in one or two sentences what happened and what it means

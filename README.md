@@ -1,17 +1,24 @@
 # return-authorship-harness
 
-A starter kit that keeps you in charge of an AI coding agent. It gives Claude Code a written
-rulebook (`CLAUDE.md`), safety checks that stop risky actions before they happen, and a
-review step before any change lands in your project.
+A starter kit that keeps you in charge of an AI coding agent. Claude Code and
+local Codex use the same written contract, scoped work orders and independent
+review before changes land.
+
+For Codex, open your clone in the app or CLI and say **read CODEX-SETUP.md and
+set me up**. The [Codex guide](CODEX-SETUP.md) explains native skills and agents,
+shared guard checks, scoped approvals and local audit. Codex hooks ship disabled;
+setup includes separate activation probes for each client. See the
+[coverage matrix](docs/codex-enforcement.md) for tested transport behavior and
+remaining limits. No live app or CLI activation is claimed by the template.
 
 ## What you need
 
-- Claude Code.
-- Python 3, named `python3` or `python`.
-- Git, and jq (a small tool the safety checks use to read their settings).
+- Claude Code or Codex (follow the matching setup guide).
+- Python 3, named `python3` or `python` (3.11+ for Codex).
+- Git and Bash; jq is additionally required for the Claude setup.
 - A GitHub account.
 
-## Get started
+## Get started with Claude Code
 
 1. On GitHub, click **Use this template**, choose **Private**, and create the copy under
    your own account.
@@ -24,13 +31,15 @@ Install it, then restart Claude Code.
 
 ## Status
 
-The safety checks work once Python is present. Setup ends with a short test that proves one
-of them blocks on your machine; the push guard stays off until setup turns it on.
+Each setup guide includes a local activation check. Codex ships with hooks disabled
+until explicit setup approval; direct-envelope tests do not prove runtime activation.
+The Git push guard remains unarmed until separately configured and installed.
 
 ## What is inside
 
 - `CLAUDE.md`: the rules every session reads first.
-- `.claude/`: the safety checks (hooks), settings, helper agents and skills.
+- `.claude/`: shared safety-check programs and Claude registration, agents and skills.
+- `.codex/`, `.agents/skills/`: native Codex registration, agents and discovered workflows.
 - `graphs/`, `roles/`: two workflows, a grill for decisions and a lane for builds, and the
   helpers' full instructions.
 - `scripts/`, `tests/`: the test suite and the checks GitHub runs on each pull request.

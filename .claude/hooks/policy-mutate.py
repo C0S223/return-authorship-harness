@@ -112,7 +112,8 @@ def is_policy(np):
     anchors = roots + [i + 1 for i in roots if parts[i] == ".claude"]
     for i in anchors:
         tail = S.join(parts[i:])
-        if tail.startswith((CL + "hooks" + S, CL + "agents" + S, ".codex" + S)):
+        if tail.startswith((CL + "hooks" + S, CL + "agents" + S, ".codex" + S,
+                            ".agents" + S + "skills" + S)):
             return True
         # The tracked
         # pre-push hook sources. `.githooks/` IS the live hook -- the main
