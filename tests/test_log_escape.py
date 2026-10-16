@@ -438,14 +438,19 @@ LATER_THAN_BASH_3_2 = {
     "|&, 4.0": (r"\|&(?![]])", ["cmd |& tee f", "cmd|&tee f"]),
     "case fall-through, 4.0": (r";;?&(?![&\]])",
         ["a) x ;&", "a) x ;;&", "case $x in a) echo a;& b) echo b;; esac"]),
-    "negative substring length, 4.2": (r"\$\{" + _NAME + r"(\[[^]]*\])?:[^}:]*:\s*-",
+    # The first colon must start an offset: `${x:-...}`, `:=`, `:+` and `:?` are
+    # 3.2 operators whose words may hold `:-` (SE r2 F3).
+    "negative substring length, 4.2": (r"\$\{" + _NAME + r"(\[[^]]*\])?:(?![-=+?])[^}:]*:\s*-",
         ['echo "${x:0:-1}"', 'K="${CMD:0:-$n}"', 'K="${1:0:-1}"', 'K="${x: 1 : -2}"',
          'K="${a[0]:1:-1}"']),
-    "negative array index, 4.3": (r"\b[A-Za-z_][A-Za-z0-9_]*\[\s*-[^]]*\]",
+    # Only `${name[-...` or an assignment `name[-...]=`: a bare `word[-...]` is a
+    # glob or regex bracket expression in 3.2 (SE r2 F3).
+    "negative array index, 4.3": (r"\$\{[#!]?[A-Za-z_][A-Za-z0-9_]*\[\s*-|"
+                                  r"(^|[\s;&|(])[A-Za-z_][A-Za-z0-9_]*\[\s*-[^]]*\]\+?=",
         ['echo "${a[-1]}"', 'K="${a[-1]:-x}"', 'K="${a[ -1 ]}"', 'K="${a[-$n]}"',
-         "a[-1]=x"]),
+         "a[-1]=x", 'K="${#a[-1]}"', "local a[-1]=x"]),
     "shopt option newer than 3.2": (
-        r"\bshopt\s+(-[a-z]+\s+)*[^;\n]*\b(autocd|checkjobs|dirspell|globstar|lastpipe|"
+        r"\bshopt\s+(-[a-z]+\s+)*([A-Za-z0-9_]+\s+)*(autocd|checkjobs|dirspell|globstar|lastpipe|"
         r"direxpand|globasciiranges|inherit_errexit|localvar_inherit|localvar_unset|"
         r"assoc_expand_once|progcomp_alias|complete_fullquote|patsub_replacement|"
         r"varredir_close|noexpand_translation|globskipdots|compat3[2-9]|compat4[0-9])\b",
@@ -471,7 +476,23 @@ BASH_3_2_LOOKALIKES = [
     "grep -v x f", 'printf "%s" "$x"', 'echo "${#a[@]}" "${!x}"', "x+=(y)",
     '[ -n "$x" ]', "local LC_ALL=C", "echo {a,b}", "for i in {1..3}; do :; done",
     'echo "${x/#a/b}"', "shopt -s nullglob", "wait $p", 'echo "${!pre@}"',
+    # SE r2 F3: valid 3.2 lines the round-2 table flagged.
+    "${A:-${B:-x}}", "${x:-a:-b}", "'foo[-_]bar'", "a[-_]*", '"a[-z]"', '"^v[-0-9]"',
+    "'s/$/;&/'", '"a?x=1;&y=2"', "shopt -q extglob && echo lastpipe",
 ]
+
+# Rows matched against the line with quoted spans blanked: these operators mean
+# nothing inside quotes, where `;&` or `|&` is sed or regex text (SE r2 F3).
+UNQUOTED_ROWS = {"&>>, 4.0", "|&, 4.0", "case fall-through, 4.0"}
+
+
+def _unquoted(line):
+    return re.sub(r"'[^']*'|\"(\\.|[^\"\\])*\"", "''", line)
+
+
+def row_matches(name, line):
+    pat = LATER_THAN_BASH_3_2[name][0]
+    return re.search(pat, _unquoted(line) if name in UNQUOTED_ROWS else line) is not None
 
 
 def bash_3_2_scan(paths):
@@ -481,8 +502,8 @@ def bash_3_2_scan(paths):
         for n, line in enumerate(h.read_text(encoding="utf-8").splitlines(), 1):
             if line.lstrip().startswith("#"):
                 continue
-            for name, (pat, _) in LATER_THAN_BASH_3_2.items():
-                if re.search(pat, line):
+            for name in LATER_THAN_BASH_3_2:
+                if row_matches(name, line):
                     hits.append("%s:%d %s: %s" % (h.name, n, name, line.strip()[:80]))
     return hits
 
@@ -498,13 +519,13 @@ class HooksRunOnBash32(unittest.TestCase):
         for name, (pat, examples) in LATER_THAN_BASH_3_2.items():
             for ex in examples:
                 with self.subTest(name=name, example=ex):
-                    self.assertRegex(ex, pat)
+                    self.assertTrue(row_matches(name, ex))
 
     def test_bash_3_2_lookalikes_are_not_flagged(self):
         for line in BASH_3_2_LOOKALIKES:
-            for name, (pat, _) in LATER_THAN_BASH_3_2.items():
+            for name in LATER_THAN_BASH_3_2:
                 with self.subTest(line=line, name=name):
-                    self.assertNotRegex(line, pat)
+                    self.assertFalse(row_matches(name, line))
 
     def test_the_scan_reports_every_spelling_planted_in_a_hook(self):
         d = Path(tempfile.mkdtemp(prefix="bash32-scan-"))
