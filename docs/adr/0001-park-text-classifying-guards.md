@@ -75,9 +75,9 @@ the grills it cites.
     `origin/HEAD` or move `origin/main`.
 - Either fail-open gap can make the push gates read the wrong default branch. Only the `main`
   ruleset covers that, by refusing a direct push to `main`, and only for identities it does
-  not exempt (`docs/enforcement/CLAUDE.md:19`). The operator reported it set on 2026-10-15,
-  with the admin role on its bypass list. So an admin push bypasses it, and an agent's push
-  does too if the shared login it acts with holds admin (`.claude/hooks/git-guard.py:193`).
+  not exempt (`docs/enforcement/CLAUDE.md:19`). Any identity on its bypass list skips it,
+  so an agent's push does too if the login it acts with is on that list
+  (`.claude/hooks/git-guard.py:193`). Give agents a login that is not.
 - Reviewers file a gap the base revision already has as a residual, not as a finding that
   blocks a merge. A change that allows what its base denied is a regression and still blocks.
 - For parked classes, the protection is still a human being present. Unattended work stays
