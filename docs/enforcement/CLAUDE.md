@@ -4,7 +4,7 @@ Supplement to root `CLAUDE.md` §8.
 
 ## Coverage and verification
 **`live` means wired and firing, not complete coverage.** Mark a cell live only in the policy edit that records the probe proving it on that target. Known bypasses are tracked as open items, not deferred protections.
-**Three targets, per-target Status columns.** Words: **live** probed there · **wired** configured, not yet probed in this tree · **unarmed** ships a placeholder (`OWNER/REPO`); installed, it refuses every push, uninstalled nothing runs · **cloud-off** exits 0 under the boundary marker (`unlock_consume.cloud_boundary()`) · **unregistered** no tool name arrives · **prose** no mechanism, the rule binds as text. **This tree was extracted with no probe run: every cell reads wired or prose until a probe lands. `ask` rows are advisory where the hook is not proven (root §8).**
+**Three targets, per-target Status columns.** Words: **live** probed there · **wired** configured, not yet probed in this tree · **unarmed** ships a placeholder (`OWNER/REPO`); installed, it refuses every push, uninstalled nothing runs · **cloud-off** exits 0 under the boundary marker (`unlock_consume.cloud_boundary()`) · **unregistered** no tool name arrives · **prose** no mechanism, the rule binds as text. **Status: working once Python is present; a live probe is a setup step (`SETUP.md`). Until one lands, cells read wired or prose and `ask` rows are advisory (root §8).**
 **Table and `scripts/test_gate_decisions.py` disagree → table is wrong.**
 **Layer:** L0 root §2 **Denied** (settings deny) · L1 hook-gated, ask or deny per cell · L2 prose only · L3 root §5 charter · CI GitHub check on the PR, every target · — not a rule class.
 
@@ -15,7 +15,7 @@ Supplement to root `CLAUDE.md` §8.
 | File-tool writes outside tree | L1 | filetool-scope | wired (ask) | cloud-off (VM disposal) | cloud-off (container disposal) |
 | Shell writes outside tree | L1 | shell-scope (`--log` is log-escape's trail) | wired (ask) | cloud-off (`--log` only; blind inside script bodies) | cloud-off |
 | Spawn roster | L1 | spawn-roster + catchall deny | wired (deny) | wired | wired |
-| Git never-items | L1 | git-guard · pre-push (refuses the default branch when `CLAUDECODE` is set) · repo ruleset (PR landing row) | git-guard wired; pre-push **unarmed** (`APPROVED_ORIGIN_URL`) until Setup | git-guard wired; pre-push **unarmed** (`APPROVED_ORIGIN_URL`, `REPO_MATCH`) until Setup | git-guard wired; pre-push **unarmed** (`APPROVED_ORIGIN_URL`) until Setup |
+| Git never-items | L1 | git-guard · pre-push (refuses the default branch when `CLAUDECODE` is set) · repo ruleset (PR landing row) | git-guard wired; pre-push **unarmed** (`APPROVED_ORIGIN_URL`) until setup | git-guard wired; pre-push **unarmed** (`APPROVED_ORIGIN_URL`, `REPO_MATCH`) until setup | git-guard wired; pre-push **unarmed** (`APPROVED_ORIGIN_URL`) until setup |
 | PR landing: `gate` = stamp + suite, `operator-merge` = policy path | CI | `ci.yml` (`pull_request_target`; the default branch's `stamp_check` and `ci_policy_check`, the PR's suite only for a head in this repository; actions pinned by sha); a ruleset the operator sets requires both jobs | wired; binds only identities the ruleset does not exempt, so an admin push bypasses it | same | same |
 | Non-loopback shell sends | L1 | net-post + `auth-net` | wired (deny) | cloud-off (platform egress control) | cloud-off (sidecar allowlist) |
 | Global env / installs | L1 | env-global + `auth-env` | wired (deny) | cloud-off (VM absorbs) | cloud-off (container absorbs) |
@@ -28,10 +28,7 @@ Supplement to root `CLAUDE.md` §8.
 Session-close copies escape, grant, integrity and `peer-` lines into tracked `handoffs/auto/` only at a cloud closeout (flag `.agent-log/closeout-requested`, 2 h), never counting them as stranded; only committed lines survive.
 
 ## Setup per target
-Placeholders ship unarmed (`APPROVED_ORIGIN_URL` in `.githooks/pre-push`; `REPO_MATCH` in `scripts/cloud-setup.sh` arms no checkout); each is a policy edit. Every target sets `APPROVED_ORIGIN_URL` to this repo's origin URL, then one hook install method:
-- **Windows:** copy `tools/git-hooks/pre-push-dispatcher` to `.git/hooks/pre-push`. No `core.hooksPath`.
-- **Managed:** set `REPO_MATCH` to this repo's `owner/repo` in the copy pasted into the environment's setup-script field; the script sets `core.hooksPath .githooks` before Claude launches. No dispatcher.
-- **Self-hosted:** have the image copy the dispatcher to `.git/hooks/pre-push`. No `core.hooksPath`.
+Placeholders ship unarmed (`APPROVED_ORIGIN_URL` in `.githooks/pre-push`; `REPO_MATCH` in `scripts/cloud-setup.sh` arms no checkout); arming each is a policy edit. Steps for Windows, macOS/Linux, managed cloud and self-hosted: `SETUP.md`.
 
 ## Policy paths
 Paths, at every checkout root (the tree root and each `worktrees/<n>/`): `CLAUDE.md`, `AGENTS.md` and `AGENTS.override.md` at any depth, root `README.md`, `.claude/settings*.json`, `.claude/keybindings.json`, `.claude/hooks/**`, `.claude/agents/**`, `.codex/**`, `.git/config|hooks|info|refs`, `.githooks/**` and `tools/git-hooks/**` (the pre-push hook's tracked sources), `roles/**` and `graphs/**`, edits to existing `skills/`/`scripts/`/`templates/` files, `.claude/` ones included, and `goals/OBJECTIVES.md` where a checkout carries one. Redirects/tee count. CI's `ci_policy_check` adds `.github/**`; no hook carries it.
