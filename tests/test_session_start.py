@@ -58,5 +58,57 @@ class SessionStartBranchLine(unittest.TestCase):
         self.assertNotIn("'gone'", out)
 
 
+PLACEHOLDER = 'APPROVED_ORIGIN_URL="https://github.com/OWNER/REPO.git"   # operator sets this\n'
+ARMED = 'APPROVED_ORIGIN_URL="https://github.com/someone/my-repo.git"   # operator sets this\n'
+NUDGE = "Say 'onboard me'"
+
+
+@unittest.skipUnless(shutil.which("bash"), "needs bash")
+class SessionStartOnboardingNudge(unittest.TestCase):
+    """The nudge prints only when the push guard is armed and no lane has run
+    (no grills/, no work/). Each case fails if its condition leaves the hook."""
+
+    def setUp(self):
+        self.repo = Path(tempfile.mkdtemp(prefix="session-start-onb-"))
+        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        subprocess.run(["git", "-C", str(self.repo), "init", "-q", "-b", "main"],
+                       check=True, capture_output=True)
+
+    def prepush(self, url_line):
+        hooks = self.repo / ".githooks"
+        hooks.mkdir()
+        (hooks / "pre-push").write_text("#!/bin/sh\nset -f\n\n" + url_line + "ZERO=0\n",
+                                        encoding="utf-8")
+
+    def nudges(self):
+        r = subprocess.run(["bash", str(HOOK)], capture_output=True, text=True,
+                           env=dict(os.environ, CLAUDE_PROJECT_DIR=str(self.repo)))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return [l for l in r.stdout.splitlines() if NUDGE in l]
+
+    def test_placeholder_present_no_line(self):
+        self.prepush(PLACEHOLDER)
+        self.assertEqual(self.nudges(), [])
+
+    def test_armed_with_grills_no_line(self):
+        self.prepush(ARMED)
+        (self.repo / "grills").mkdir()
+        self.assertEqual(self.nudges(), [])
+
+    def test_armed_with_work_no_line(self):
+        self.prepush(ARMED)
+        (self.repo / "work").mkdir()
+        self.assertEqual(self.nudges(), [])
+
+    def test_armed_with_neither_one_line(self):
+        self.prepush(ARMED)
+        out = self.nudges()
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("ONBOARDING.md", out[0])
+
+    def test_no_prepush_file_no_line(self):
+        self.assertEqual(self.nudges(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

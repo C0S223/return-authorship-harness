@@ -35,6 +35,19 @@ if [ "${DIRTY:-0}" -gt 0 ]; then
   echo "session-start: $DIRTY dirty file(s) — another session may be working here. Never stage or commit files you did not create."
 fi
 
+# First-run nudge (ONBOARDING.md): one line when setup armed the push guard
+# (APPROVED_ORIGIN_URL no longer the OWNER/REPO placeholder) and no lane has
+# run yet (no grills/ and no work/). A missing hook file or URL line is not armed.
+URL_LINE="$(grep '^APPROVED_ORIGIN_URL=' "$ROOT/.githooks/pre-push" 2>/dev/null || true)"
+case "$URL_LINE" in
+  ''|*OWNER/REPO*) ;;
+  *)
+    if [ ! -d "$ROOT/grills" ] && [ ! -d "$ROOT/work" ]; then
+      echo "session-start: Setup is complete. Say 'onboard me' for a short tour. (Agent: offer this to the person once; the tour is ONBOARDING.md.)"
+    fi
+    ;;
+esac
+
 LOG="$ROOT/.agent-log/$(date +%F).md"
 if [ -f "$LOG" ]; then
   echo "session-start: today's action-log tail (best-effort injection — doubt an authorization = read the full log):"
