@@ -16,8 +16,11 @@
 # Every quoted "$CLAUDE_PROJECT_DIR/..." path in a command must be a file; a
 # command naming none is unreadable and blocks. Any command using run-python.sh
 # needs a python3 or python that really is Python 3, probed as the launcher
-# does. The commands are read with jq (session-close and log-escape need it
-# too, so its absence blocks here).
+# does. Every command's interpreter must also resolve, as before lane 6175:
+# the first word after the guard, or the first word of an unguarded command,
+# so a bare `python "..."` row on a machine without `python` still blocks.
+# The commands are read with jq (session-close and log-escape need it too, so
+# its absence blocks here).
 set -u
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
@@ -41,9 +44,14 @@ cmds="$(jq -r '.. | objects | select(has("command")) | .command | strings' "$SET
 command -v bash >/dev/null 2>&1 || fail="$fail\n  interpreter 'bash' not found"
 need_python=""
 path_re='"[$][{]?CLAUDE_PROJECT_DIR[}]?/([^"]+)"'
+guard_re='^f="[^"]*"; \[ -f "[$]f" \] [|][|] [{] [^}]*[}]; (.*)$'
 while IFS= read -r cmd; do
   cmd="${cmd%$'\r'}"
   [ -n "$cmd" ] || continue
+  run="$cmd"
+  [[ "$cmd" =~ $guard_re ]] && run="${BASH_REMATCH[1]}"
+  interp="${run%% *}"
+  command -v "$interp" >/dev/null 2>&1 || fail="$fail\n  interpreter '$interp' not found  (for: ${cmd:0:80})"
   rest="$cmd"
   found=""
   while [[ "$rest" =~ $path_re ]]; do

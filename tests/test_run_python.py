@@ -35,6 +35,18 @@ print(json.dumps({"ran": os.environ.get("RUN_PYTHON_TEST_NAME"), "stdin": data,
 sys.exit(int(os.environ.get("HOOK_RC", "0")))
 """
 
+# A `python` that is Python 2 to the version probe and runs anything else as a
+# hook that prints PY2RAN and exits 0, so only the probe's version check can
+# refuse it (SE r1 F2: mutants M1 and M2 removed that check unnoticed).
+PY2_HELPER = r"""
+import sys
+if sys.argv[1:2] == ["-c"]:
+    sys.version_info = (2, 7, 18, "final", 0)
+    exec(sys.argv[2])
+else:
+    print("PY2RAN")
+"""
+
 
 @unittest.skipIf(BASH is None, "bash not found")
 class RunPython(unittest.TestCase):
@@ -52,6 +64,11 @@ class RunPython(unittest.TestCase):
         body = body or 'RUN_PYTHON_TEST_NAME=%s exec "%s" "$@"' % (name, sys.executable)
         p.write_text("#!/bin/sh\n%s\n" % body, encoding="utf-8")
         p.chmod(0o755)
+
+    def fake_py2(self, name="python"):
+        helper = self.tmp / "py2_helper.py"
+        helper.write_text(PY2_HELPER, encoding="utf-8")
+        self.fake(name, 'exec "%s" "%s" "$@"' % (sys.executable, helper))
 
     def run_launcher(self, *args, stdin="", **env):
         e = {"PATH": str(self.bin)}
@@ -90,13 +107,21 @@ class RunPython(unittest.TestCase):
         self.assertIn("Install Python 3", r.stderr)
 
     def test_a_python3_that_is_not_python_3_is_skipped_silently(self):
-        # The Windows Store alias prints a message and exits 9009; a Python 2
-        # `python` fails the version probe. Neither may leak into stdout.
+        # The Windows Store alias prints a message and exits 9009, which fails
+        # any probe; its output may not leak into stdout. The Python 2 case,
+        # which only the version check catches, is test_python_2_is_refused.
         self.fake("python3", 'echo "Python was not found; run without arguments to install"; exit 9009')
         self.fake("python")
         r = self.run_launcher(self.hook)
         self.assertEqual(r.returncode, 0)
         self.assertEqual(self.ran(r)["ran"], "python")
+
+    def test_python_2_is_refused(self):
+        self.fake_py2()
+        r = self.run_launcher(self.hook)
+        self.assertEqual((r.returncode, r.stdout), (2, ""))
+        self.assertNotIn("PY2RAN", r.stdout + r.stderr)
+        self.assertIn("no Python 3 found", r.stderr)
 
     def test_only_a_stub_blocks(self):
         self.fake("python3", "echo stub; exit 9009")
@@ -252,6 +277,40 @@ class Wiring(unittest.TestCase):
         for n in names:
             self.link(n, {"bash": BASH, "jq": JQ, "python3": sys.executable}[n])
         return str(self.bin)
+
+    def add_row(self, command):
+        p = self.proj / ".claude" / "settings.json"
+        cfg = json.loads(p.read_text(encoding="utf-8"))
+        cfg["hooks"]["PreToolUse"].append(
+            {"matcher": "Bash", "hooks": [{"type": "command", "command": command}]})
+        p.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+    @unittest.skipIf(JQ is None, "jq not found")
+    def test_preflight_refuses_python_2(self):
+        helper = self.tmp / "py2_helper.py"
+        helper.write_text(PY2_HELPER, encoding="utf-8")
+        p = self.bin / "python"
+        p.write_text('#!/bin/sh\nexec "%s" "%s" "$@"\n' % (sys.executable, helper), encoding="utf-8")
+        p.chmod(0o755)
+        r = self.preflight(self.tool_path("bash", "jq"))
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("no Python 3 found", r.stderr)
+
+    @unittest.skipIf(JQ is None, "jq not found")
+    def test_preflight_checks_the_interpreter_of_an_unlaunched_row(self):
+        # SE r1 F1: a bare `python` row passed preflight, then exited 127.
+        self.add_row('python "$CLAUDE_PROJECT_DIR/.claude/hooks/git-guard.py"')
+        r = self.preflight(self.tool_path("bash", "jq", "python3"))
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("interpreter 'python' not found", r.stderr)
+
+    @unittest.skipIf(JQ is None, "jq not found")
+    def test_preflight_blocks_a_row_naming_no_project_file(self):
+        # SE r1 M3: the block was claimed but unpinned.
+        self.add_row("echo hi")
+        r = self.preflight()
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("names no project file", r.stderr)
 
     @unittest.skipIf(JQ is None, "jq not found")
     def test_preflight_passes_a_whole_tree(self):

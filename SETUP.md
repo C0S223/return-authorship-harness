@@ -33,6 +33,11 @@ check on GitHub:
 - If an agent pushes with its own GitHub login, that login is only a **collaborator**: never
   the owner and never an admin. An owner or admin skips the branch protection set up in
   step 7, so an agent with that login could merge anything.
+- If the agent pushes with *their* login (the usual case when they cloned with their own
+  account), tell them plainly: the ruleset in step 7 will not bind the agent, because that
+  login is on its bypass list. Only this machine's safety checks stop the agent pushing to
+  the main branch or merging past a red check. A separate collaborator login for the agent
+  is the stronger setup.
 
 If the repository was created by the agents' login, ask them to create a new one from the
 template under their own account, or transfer this one to it, before going on.
@@ -57,7 +62,9 @@ environment no unlock is needed: there the pull request is the approval, and the
 
 **b. Set the address.** In `.githooks/pre-push`, set `APPROVED_ORIGIN_URL` to the URL from
 step 2. Put the same URL in the `placeholder` line of `tests/test_prepush_policy.py`, or the
-suite goes red.
+suite goes red. If the URL has anything between `https://` and `@` (a name or a token), stop:
+never copy it into a file. Ask them to set origin to the plain URL in their own terminal
+(`git remote set-url origin https://github.com/<owner>/<repo>.git`), then run step 2 again.
 
 **c. Install it.**
 
@@ -66,17 +73,23 @@ suite goes red.
   skips a hook that is not executable.
 - **Managed cloud:** **STOP.** Ask them to paste `scripts/cloud-setup.sh` into the
   environment's setup-script field, with `OWNER/REPO` in its `REPO_MATCH` line changed to
-  their `owner/repo`. The script turns the guard on before each session starts.
+  their `owner/repo`. The script runs before a session starts, so the guard is on from the
+  next session. In that session, run the check below; if it fails, the person types
+  `auth-policy .git/config` alone, then you run `git config core.hooksPath .githooks` and
+  check again.
 - **Self-hosted runner:** **STOP.** The runner's image must copy the dispatcher to
   `.git/hooks/pre-push`; ask whoever builds the image to add that step.
 
-On a computer or runner, check it with `python3 scripts/test_prepush_install.py
+On every target, check it with `python3 scripts/test_prepush_install.py
 --require-installed` (or `python`). If a push is later refused because origin's default
 branch is unknown, the person runs `git remote set-head origin --auto` in their own terminal.
 
 **d. Lock again.** Ask them to send `revoke-policy` as a message on its own. Then commit the
-changed files on a new branch and open a pull request; they merge it (step 7 says why its
-`operator-merge` check is red).
+changed files on a new branch. **STOP:** ask their yes to push that branch and open one pull
+request, naming both. With it, push, open the pull request and mark it ready for review (a
+draft runs no checks). Both checks will be red: `operator-merge` because these are policy
+files (step 7), and `gate` because no reviewer approval file exists yet. The `(c) suite` line
+in the `gate` run's summary should still read PASS; show them that line, then they merge it.
 
 ## 4. Run the test suite
 
@@ -89,11 +102,11 @@ pass.
 The checks are configured but unproven on this machine until one blocks for real. **STOP**
 and ask permission to try one forbidden command on purpose. With their yes, run:
 
-    git remote add setup-probe https://example.invalid/probe.git
+    git remote set-url setup-probe https://example.invalid/probe.git
 
-Expected: a `git-guard` refusal. Tell them that refusal is the good result. If the command
-went through instead, run `git remote remove setup-probe`, tell them plainly that the safety
-checks are not running, and go back to step 1. Do not describe the setup as protected.
+Expected: a `git-guard` refusal. Tell them that refusal is the good result. If git answered
+instead (for example "No such remote"), nothing was changed, but the safety checks are not
+running: tell them plainly and go back to step 1. Do not describe the setup as protected.
 
 ## 6. The board connector (optional)
 
@@ -113,6 +126,10 @@ person through it on GitHub.
 3. On the bypass list, put only the person's own account (or a role only they hold). Never
    the agents' login: anyone on that list skips the ruleset.
 4. Save. In **Settings**, **General**, turn on **Allow auto-merge**.
+
+If GitHub shows that the ruleset is not enforced on this private repository (GitHub Free),
+tell them plainly: the main branch is then protected only by this machine's safety checks,
+and auto-merge may be unavailable. Enforcement needs a paid plan.
 
 Explain what this does. Every change arrives as a pull request. `gate` passes when the tests
 pass and a reviewer approval file sits under `grills/` (`scripts/stamp_check.py`).
