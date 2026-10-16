@@ -7,7 +7,9 @@ review step before any change lands in your project.
 ## What you need
 
 - Claude Code.
-- Python 3, named `python3` or `python`.
+- Python 3.10 or newer, named `python3` or `python`. On a Mac, the built-in `python3` is
+  often 3.9, which is too old: a newer `python` is used instead if you have one; otherwise
+  install a current Python from python.org.
 - Git, and jq (a small tool the safety checks use to read their settings).
 - A GitHub account.
 
@@ -19,13 +21,15 @@ review step before any change lands in your project.
 3. The agent walks you through the rest one step at a time, and stops whenever a step is
    yours to do.
 
-If Claude Code answers with `PREFLIGHT BLOCK`, a tool from the list above is missing.
+If Claude Code answers with `PREFLIGHT BLOCK`, a tool from the list above is missing or
+too old.
 Install it, then restart Claude Code.
 
 ## Status
 
-The safety checks work once Python is present. Setup ends with a short test that proves one
-of them blocks on your machine; the push guard stays off until setup turns it on.
+The safety checks work once Python 3.10 or newer is present. Setup ends with a short test
+that proves one of them blocks on your machine; the push guard stays off until setup turns
+it on.
 
 ## What is inside
 

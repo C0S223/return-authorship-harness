@@ -1,0 +1,17 @@
+# DID swing 4: lane 6177, SE r2 F3 only (base a35cc51)
+- **Changed:** `tests/test_log_escape.py` only. The nine F3 lines are now in `BASH_3_2_LOOKALIKES` (28 lines in all), and four rows are narrower:
+  - **negative substring length:** the first colon must open an offset, so `(?![-=+?])` after it; `${x:-..}`, `:=`, `:+` and `:?` are 3.2 operators;
+  - **negative array index:** only `${name[-`, `${#name[-` or `${!name[-`, or an assignment `name[-..]=`; a bare `word[-..]` is a glob or regex bracket;
+  - **case fall-through, `|&`, `&>>`:** matched with quoted spans blanked (`UNQUOTED_ROWS`, via `row_matches`);
+  - **shopt:** after `shopt` and its flags, only plain words may come before the option name, so nothing past `&&` counts.
+- **New must-catch spellings:** `${#a[-1]}` and `local a[-1]=x`, for 67 in all.
+- **Red:** the a35cc51 table flags 9 of the 9 F3 lines.
+- **Replay, before the `${#`/`${!` widening:** 19 lines planted after `log-escape.sh:36` were all CAUGHT: the 18 round-1 plants plus `echo {a}>f`. The grill's 3 planted false hits and its 16 other clean lines were all clean, `read -a`, `${a[@]: -1}`, `${x//[-]/_}` and `case $c in [-+]*)` among them. The widening is caught by the test run below, and the hook scan still has zero hits.
+- `python3 tests/test_log_escape.py`: `Ran 40 tests ... OK (skipped=2)`.
+- `python3 scripts/run_tests.py`: `38 suites: 38 pass, 0 fail, 0 skip (9 tests skipped inside 4 passing suites)`.
+- **New residuals, not flagged because only a parser could tell them apart:**
+  - A `;&`, `|&` or `&>>` that the quote blanker hides: its regex knows no backslash-escaped quote outside quotes and no quote spanning lines.
+  - A negative index inside arithmetic (`$(( a[-1] ))`) or in quoted `unset 'a[-1]'`.
+  - A quoted shopt name (`shopt -s "globstar"`).
+- **Residuals carried from round 2:** multi-line or later-in-`$( )` `case`; `read` options after an option that takes an argument.
+- **Untouched:** SETUP.md and the hooks.

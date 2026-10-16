@@ -1,0 +1,12 @@
+# DID swing 5: lane 6177, SE r3 F4 revert (base aa3ecde)
+- **Changed:** `tests/test_log_escape.py` only.
+  - `UNQUOTED_ROWS` is back to `{"case fall-through, 4.0"}`, so `|&` and `&>>` match the raw line again, as in round 2.
+  - `LINE="$(cmd |& tr -d x)"` and `OUT="$(cmd &>> f)"` are added as must-catch spellings.
+  - The comment above `UNQUOTED_ROWS` says why those two rows stay raw.
+  - New docstring paragraph: the scan is frozen, gaps are recorded as residuals, and it lists the residuals: swing 3/4's, `;;&`/`;&` inside a double-quoted `$( )`, unquoted `unset a[-1]`, and the `[[ $k == key[-_]=* ]]` false hit.
+- **Red:** with aa3ecde's blanking put back on the two rows, both new spellings miss (`row_matches` is False for each).
+- **Counts:** 69 must-catch spellings, 28 lookalikes, and `bash_3_2_scan` returns `[]` on today's hooks.
+- **Lookalikes:** neither reverted row flags any of the 28, so none moved to the residual list.
+- `python3 tests/test_log_escape.py`: `Ran 40 tests ... OK (skipped=2)`.
+- `python3 scripts/run_tests.py`: `38 suites: 38 pass, 0 fail, 0 skip (9 tests skipped inside 4 passing suites)`.
+- **Untouched:** every other file.

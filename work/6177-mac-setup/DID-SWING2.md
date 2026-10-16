@@ -1,0 +1,17 @@
+# DID swing 2: lane 6177, scope widened to log-escape-fast.sh (base 4b23062)
+- **Hooks.** These three calls now go through `bash "$ROOT/.claude/hooks/run-python.sh" <hook>` in place of a bare `python`: `log-escape-fast.sh` (log-escape.py), `log-escape.sh` shell-scope `--log`, and filetool-scope `--log`. Failure handling is unchanged: the fast path still ends in `|| return 0`, the `--log` calls still keep `2>/dev/null ... || true`, and the hook exits 0.
+- **Tests.** New class `OnlyPython3OnPath` in `tests/test_log_escape.py`. Its PATH holds only bash, mkdir, tr, sed, cat, date, jq and `python3`, with no `python`, and it unsets `CLAUDE_CODE_REMOTE`/`HARNESS_BOUNDARY`, because under the cloud marker filetool-scope `--log` prints nothing by design. It checks:
+  - shellwrite and filewrite lines through the fast path;
+  - the same two lines with `log-escape-fast.sh` deleted, so each `--log` call answers;
+  - `fast()` itself sets `FAST=1`;
+  - with no Python at all, rc 0 and empty stdout/stderr.
+- **Red, all three sites reverted to 4b23062:** `FAILED (failures=4, skipped=2)`, the four line tests.
+- **Red, one site reverted at a time:**
+  - shell-scope alone fails only `test_a_shell_write_logs_through_shell_scope_log`;
+  - filetool-scope alone fails only `test_a_file_write_logs_through_filetool_scope_log`;
+  - the fast path alone fails only `test_the_fast_path_itself_answers_with_python3_only`. That test exists because the slow path gives an identical line, which hid this site.
+- `python3 tests/test_log_escape.py`: `Ran 38 tests ... OK (skipped=2)`. The two skips are the frozen-original cases, which skip on the base too.
+- `python3 scripts/run_tests.py`: `38 suites: 38 pass, 0 fail, 0 skip (9 tests skipped inside 4 passing suites)`.
+- **Cost:** 20 Edit calls through a scratch copy averaged 72 ms per call, against 55 ms before. The ~17 ms difference is most likely the launcher's version probe, an extra Python start; that cause was not measured separately. Bash calls that `shell_fast` answers start no Python, so they do not pay it.
+- **Unverified:** no macOS host is available, so the fake `python3`-only PATH stands in for one. A real Mac's PATH also holds `/usr/bin/python3` (3.9). There the launcher skips it only if a newer `python` exists; otherwise preflight blocks every prompt, and these calls log no scope line. The `test_run_python.py` cases already pin that.
+- **Scrub:** I grepped the edited paths for "finding" followed by a number: no hits.
