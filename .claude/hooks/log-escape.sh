@@ -91,6 +91,8 @@ case "$TOOL" in
     # holes. `gh` is matched as a bare token rather than by subcommand for the
     # same reason: gh is a network client, so every invocation is egress, and
     # a verb list would miss the next verb.
+    # The --log helpers below start through run-python.sh, never a bare `python`:
+    # a host with only `python3` logged no shellwrite or filewrite line (lane 6177).
     NL=$'\n'
     SCAN_SRC="${RAW//\\$NL/ }"
     SCAN_SRC="${SCAN_SRC//$NL/;}"
@@ -127,7 +129,7 @@ case "$TOOL" in
     fi
     [ -n "$KIND" ] && LINE="$KIND: ${CMD:0:200}"
     if [ -z "$LINE" ]; then
-      if [ -n "$FAST" ]; then LINE="$SS_LINE"; else LINE="$(printf '%s' "$INPUT" | python "$ROOT/.claude/hooks/shell-scope.py" --log 2>/dev/null | tr -d '\r' || true)"; fi
+      if [ -n "$FAST" ]; then LINE="$SS_LINE"; else LINE="$(printf '%s' "$INPUT" | bash "$ROOT/.claude/hooks/run-python.sh" "$ROOT/.claude/hooks/shell-scope.py" --log 2>/dev/null | tr -d '\r' || true)"; fi
     fi
     ;;
   Write|Edit|NotebookEdit)
@@ -136,7 +138,7 @@ case "$TOOL" in
     # approved escape left a trail and its twin did not. Measured 2026-09-20.
     # Read and Grep keep the fast exit above, so the 155-170 ms this header
     # records lands on writes only, not on every call.
-    if [ -n "$FAST" ]; then LINE="$FT_LINE"; else LINE="$(printf '%s' "$INPUT" | python "$ROOT/.claude/hooks/filetool-scope.py" --log 2>/dev/null | tr -d '
+    if [ -n "$FAST" ]; then LINE="$FT_LINE"; else LINE="$(printf '%s' "$INPUT" | bash "$ROOT/.claude/hooks/run-python.sh" "$ROOT/.claude/hooks/filetool-scope.py" --log 2>/dev/null | tr -d '
 ' || true)"; fi
     ;;
   mcp__claude-code-remote__*|mcp__Claude_Code_Remote__*)

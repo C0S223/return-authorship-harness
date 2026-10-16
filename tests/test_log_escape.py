@@ -308,6 +308,101 @@ class LogEscapeCase(unittest.TestCase):
                 self.assertIn(b"TID='trig_abc'", r.stdout)
 
 
+class OnlyPython3OnPath(unittest.TestCase):
+    """A host with `python3` and no `python` still gets every scope line.
+
+    log-escape.sh's shell-scope and filetool-scope `--log` calls and
+    log-escape-fast.sh's log-escape.py call ran a bare `python`. With only
+    `python3` on PATH (macOS with a python.org or Homebrew install) each failed
+    quietly and the out-of-tree write logged nothing. They now start through
+    run-python.sh. PATH here holds only the tools the hooks use, `python3`
+    among them; the "slow" cases delete log-escape-fast.sh from the copy so the
+    two `--log` calls in log-escape.sh are what answer."""
+
+    setUp = LogEscapeCase.setUp
+
+    def run_hook(self, payload, fast=True):
+        if not fast:
+            (self.root / ".claude" / "hooks" / "log-escape-fast.sh").unlink()
+        bin_dir = self.root / "py3only-bin"
+        bin_dir.mkdir()
+        for tool in ("bash", "mkdir", "tr", "sed", "cat", "date", "jq"):
+            found = shutil.which(tool)
+            if found:
+                (bin_dir / tool).symlink_to(found)
+        (bin_dir / "python3").symlink_to(sys.executable)
+        self.assertIsNone(shutil.which("python", path=str(bin_dir)))
+        r = subprocess.run(["bash", self.hook.as_posix()], input=json.dumps(payload),
+                           capture_output=True, text=True, env=self.host_env(bin_dir))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return "".join(p.read_text(encoding="utf-8")
+                       for p in (self.root / ".agent-log").glob("*.md"))
+
+    def host_env(self, bin_dir):
+        # A host, not a cloud boundary: under the marker filetool-scope --log
+        # prints nothing by design, which would hide the defect.
+        env = {k: v for k, v in self.env.items()
+               if k not in ("CLAUDE_CODE_REMOTE", "HARNESS_BOUNDARY")}
+        env["PATH"] = str(bin_dir)
+        return env
+
+    def outside(self):
+        return Path(tempfile.gettempdir(), "zz-outside", "probe.txt").as_posix()
+
+    def shell_write(self):
+        return {"tool_name": "Bash", "tool_input": {"command": "echo x > %s" % self.outside()}}
+
+    def file_write(self):
+        return {"tool_name": "Edit", "tool_input": {
+            "file_path": self.outside(), "old_string": "a", "new_string": "b"}}
+
+    @unittest.skipIf(shutil.which("jq") is None, "jq not found")
+    def test_a_shell_write_logs_through_the_fast_path(self):
+        self.assertIn("shellwrite:", self.run_hook(self.shell_write()))
+
+    @unittest.skipIf(shutil.which("jq") is None, "jq not found")
+    def test_a_file_write_logs_through_the_fast_path(self):
+        self.assertIn("filewrite:", self.run_hook(self.file_write()))
+
+    @unittest.skipIf(shutil.which("jq") is None, "jq not found")
+    def test_the_fast_path_itself_answers_with_python3_only(self):
+        # The slow path gives the same line, so the line alone cannot show that
+        # fast() still reaches log-escape.py; FAST=1 can.
+        bin_dir = self.root / "py3only-bin"
+        bin_dir.mkdir()
+        for tool in ("bash", "tr", "sed", "jq"):
+            (bin_dir / tool).symlink_to(shutil.which(tool))
+        (bin_dir / "python3").symlink_to(sys.executable)
+        fast = self.root / ".claude" / "hooks" / "log-escape-fast.sh"
+        r = subprocess.run(
+            ["bash", "-c", 'ROOT="$2"; TOOL=Edit; FAST=""; . "$1"; '
+             'IFS= read -r -d "" INPUT; fast; echo "FAST=$FAST"',
+             "x", fast.as_posix(), self.root.as_posix()],
+            input=json.dumps(self.file_write()), capture_output=True, text=True,
+            env=self.host_env(bin_dir))
+        self.assertEqual(r.stdout.split()[-1:], ["FAST=1"], r.stdout + r.stderr)
+
+    @unittest.skipIf(shutil.which("jq") is None, "jq not found")
+    def test_a_shell_write_logs_through_shell_scope_log(self):
+        self.assertIn("shellwrite:", self.run_hook(self.shell_write(), fast=False))
+
+    @unittest.skipIf(shutil.which("jq") is None, "jq not found")
+    def test_a_file_write_logs_through_filetool_scope_log(self):
+        self.assertIn("filewrite:", self.run_hook(self.file_write(), fast=False))
+
+    @unittest.skipIf(shutil.which("jq") is None, "jq not found")
+    def test_no_python_at_all_still_never_blocks(self):
+        # These hooks log only: no Python means no scope line, never a block.
+        (self.root / "py3only-bin").mkdir()
+        bin_dir = self.root / "py3only-bin"
+        for tool in ("bash", "mkdir", "tr", "sed", "cat", "date", "jq"):
+            (bin_dir / tool).symlink_to(shutil.which(tool))
+        for payload in (self.shell_write(), self.file_write()):
+            with self.subTest(tool=payload["tool_name"]):
+                r = subprocess.run(["bash", self.hook.as_posix()], input=json.dumps(payload),
+                                   capture_output=True, text=True, env=self.host_env(bin_dir))
+                self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+
 # Bash syntax later than 3.2, which is macOS's /bin/bash: the printf clock
 # format silently disabled log-escape there (board 6177, item 1). Each entry is
 # (pattern, a line it must catch). Full-line comments are not scanned.

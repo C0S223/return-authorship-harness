@@ -15,7 +15,9 @@ fast() {
   case "$TOOL" in
     Bash|PowerShell) if shell_fast; then FAST=1; return 0; fi ;;
   esac
-  OUT="$(exec python "$ROOT/.claude/hooks/log-escape.py" "$TOOL" <<<"$INPUT" 2>/dev/null)" || return 0
+  # Through run-python.sh, never a bare `python`: a host with only `python3`, or
+  # whose `python` is too old, lost every line this answers (lane 6177).
+  OUT="$(exec bash "$ROOT/.claude/hooks/run-python.sh" "$ROOT/.claude/hooks/log-escape.py" "$TOOL" <<<"$INPUT" 2>/dev/null)" || return 0
   if [[ "$OUT" == "#log-escape"$'\n'*$'\n'"FAST=1" ]]; then eval "$OUT"; fi
 }
 
