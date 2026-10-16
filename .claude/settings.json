@@ -54,12 +54,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/preflight.sh\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/preflight.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\"",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-prompt.py\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-prompt.py\"",
             "timeout": 10
           }
         ]
@@ -71,12 +71,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-mutate.py\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-mutate.py\"",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/filetool-scope.py\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/filetool-scope.py\"",
             "timeout": 10
           }
         ]
@@ -86,27 +86,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-mutate.py\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-mutate.py\"",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/git-guard.py\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/git-guard.py\"",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/net-post.py\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/net-post.py\"",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/env-global.py\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/env-global.py\"",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/shell-scope.py\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/shell-scope.py\"",
             "timeout": 10
           }
         ]
@@ -116,7 +116,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/spawn-roster.py\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/spawn-roster.py\"",
             "timeout": 10
           }
         ]
@@ -126,7 +126,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/trigger-shape.py\""
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/trigger-shape.py\""
           }
         ]
       }
@@ -137,7 +137,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/log-escape.sh\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/log-escape.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\"",
             "timeout": 10
           },
           {
@@ -152,7 +152,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-integrity.py\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-integrity.py\"",
             "timeout": 10
           }
         ]
@@ -164,7 +164,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/log-escape.sh\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/log-escape.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\"",
             "timeout": 10
           }
         ]
@@ -174,7 +174,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-integrity.py\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-integrity.py\"",
             "timeout": 10
           }
         ]
@@ -185,7 +185,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\"",
             "timeout": 10
           }
         ]
@@ -195,7 +195,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-integrity.py\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-integrity.py\"",
             "timeout": 10
           }
         ]
@@ -205,7 +205,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/auto-compact/resume.sh\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/auto-compact/resume.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\"",
             "timeout": 10
           }
         ]
@@ -216,7 +216,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-close.sh\"",
+            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/session-close.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 1; }; bash \"$f\"",
             "timeout": 15
           }
         ]

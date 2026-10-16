@@ -26,7 +26,7 @@ if [ -z "$hook" ]; then
     exit 2
 fi
 if [ ! -f "$hook" ]; then
-    echo "run-python: hook file not found: $hook. Restore it (git checkout -- <that path>) or fix its line in .claude/settings.json." >&2
+    echo "Safety check file missing: $hook. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git." >&2
     exit 2
 fi
 shift
