@@ -434,8 +434,8 @@ LATER_THAN_BASH_3_2 = {
     "EPOCHSECONDS, EPOCHREALTIME, BASHPID, SRANDOM or BASH_ARGV0":
         (r"\b(EPOCHSECONDS|EPOCHREALTIME|BASHPID|SRANDOM|BASH_ARGV0)\b",
          ["NOW=$EPOCHSECONDS", "echo ${BASHPID}"]),
-    "&>>, 4.0": (r"&>>", ["echo x &>> f", "echo x&>>f"]),
-    "|&, 4.0": (r"\|&(?![]])", ["cmd |& tee f", "cmd|&tee f"]),
+    "&>>, 4.0": (r"&>>", ["echo x &>> f", "echo x&>>f", 'OUT="$(cmd &>> f)"']),
+    "|&, 4.0": (r"\|&(?![]])", ["cmd |& tee f", "cmd|&tee f", 'LINE="$(cmd |& tr -d x)"']),
     "case fall-through, 4.0": (r";;?&(?![&\]])",
         ["a) x ;&", "a) x ;;&", "case $x in a) echo a;& b) echo b;; esac"]),
     # The first colon must start an offset: `${x:-...}`, `:=`, `:+` and `:?` are
@@ -481,9 +481,10 @@ BASH_3_2_LOOKALIKES = [
     "'s/$/;&/'", '"a?x=1;&y=2"', "shopt -q extglob && echo lastpipe",
 ]
 
-# Rows matched against the line with quoted spans blanked: these operators mean
-# nothing inside quotes, where `;&` or `|&` is sed or regex text (SE r2 F3).
-UNQUOTED_ROWS = {"&>>, 4.0", "|&, 4.0", "case fall-through, 4.0"}
+# Rows matched against the line with quoted spans blanked: inside quotes `;&` is
+# sed or regex text (SE r2 F3). `|&` and `&>>` stay raw, since the blanker would
+# also hide them inside a double-quoted `$( )` (SE r3 F4).
+UNQUOTED_ROWS = {"case fall-through, 4.0"}
 
 
 def _unquoted(line):
@@ -513,7 +514,19 @@ class HooksRunOnBash32(unittest.TestCase):
 
     No bash 3.2 runs here, so this is a scan, not an execution: it shows the
     hooks need nothing a 3.2 shell lacks, from the list above. A construct the
-    list does not name is not caught."""
+    list does not name is not caught.
+
+    The scan is frozen. It is a text matcher standing in for running this suite
+    under bash 3.2 (macOS /bin/bash first on PATH), so a gap found later is
+    recorded here as a residual, not patched (docs/adr/0001, parked text
+    matchers). Known residuals, each needing a parser or that bash 3.2 run:
+    a `case` later inside `$( )`; `read` options after an option that takes an
+    argument; any construct split across lines; a `;&` hidden by the quote
+    blanker (escaped quotes, quotes spanning lines), and
+    `;;&` or `;&` inside a double-quoted `$( )`; a negative index in arithmetic
+    (`$(( a[-1] ))`), in quoted `unset 'a[-1]'` or in unquoted `unset a[-1]`;
+    a quoted shopt name (`shopt -s "globstar"`); and one false hit, the valid
+    3.2 glob `[[ $k == key[-_]=* ]]`, which the assignment branch flags."""
 
     def test_each_pattern_catches_every_listed_spelling(self):
         for name, (pat, examples) in LATER_THAN_BASH_3_2.items():
