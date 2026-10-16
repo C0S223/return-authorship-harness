@@ -406,25 +406,85 @@ class OnlyPython3OnPath(unittest.TestCase):
 # Bash syntax later than 3.2, which is macOS's /bin/bash: the printf clock
 # format silently disabled log-escape there (board 6177, item 1). Each entry is
 # (pattern, a line it must catch). Full-line comments are not scanned.
+_NAME = r"([A-Za-z_][A-Za-z0-9_]*|[0-9]+|[@*])"        # a parameter: name, positional, @ or *
+_DECL = r"\b(declare|typeset|local|readonly)(\s+-[a-zA-Z]+)*\s+-[a-zA-Z]*"
 LATER_THAN_BASH_3_2 = {
-    "printf clock format, 4.2": (r"%\([^)]*\)T", "printf -v NOW '%(%T)T' -1"),
-    "associative array, 4.0": (r"\b(declare|local|typeset)\s+-[a-zA-Z]*A", "local -A seen"),
-    "nameref, 4.3": (r"\b(declare|local|typeset)\s+-[a-zA-Z]*n\b", "local -n ref=x"),
-    "mapfile, readarray or coproc, 4.0": (r"\b(mapfile|readarray|coproc)\b", "mapfile -t L < f"),
-    "case modification, 4.0": (r"\$\{[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?(,,?|\^\^?)\}", 'x="${x,,}"'),
-    "parameter transformation, 4.4": (r"\$\{[^}]*@[QEPAaKkUuL]\}", 'echo "${x@Q}"'),
-    "[[ -v ]], 4.2": (r"\[\[\s+-v\s", "[[ -v X ]] || exit"),
-    "EPOCHSECONDS, EPOCHREALTIME or BASHPID": (r"\b(EPOCHSECONDS|EPOCHREALTIME|BASHPID)\b",
-                                              "NOW=$EPOCHSECONDS"),
-    "&>>, 4.0": (r"&>>", "echo x &>> f"),
-    "|&, 4.0": (r"\|&(?![]])", "cmd |& tee f"),
-    "case fall-through, 4.0": (r";;?&\s*($|#)", "a) x ;&"),
-    "negative substring length, 4.2": (r"\$\{[A-Za-z_][A-Za-z0-9_]*:[^}:]*:\s*-[0-9]",
-                                       'echo "${x:0:-1}"'),
-    "negative array index, 4.3": (r"\$\{[A-Za-z_][A-Za-z0-9_]*\[-[0-9]+\]\}", 'echo "${a[-1]}"'),
-    "globstar or lastpipe": (r"\bshopt\s+-s\s+[^;\n]*\b(globstar|lastpipe)\b", "shopt -s lastpipe"),
-    "wait -n, 4.3": (r"\bwait\s+-n\b", "wait -n"),
+    # name: (pattern, [every spelling it must catch]). Each spelling is self-tested
+    # and planted in a scratch hook (SE r1 F1: one example per row hid six misses).
+    "printf clock format, 4.2": (r"%\([^)]*\)T",
+        ["printf -v NOW '%(%T)T' -1", "printf '%(%F)T\\n' -1"]),
+    "associative array, 4.0": (_DECL + "A",
+        ["local -A seen", "declare -gA m", "typeset -r -A m", "readonly -A m"]),
+    "nameref, 4.3": (_DECL + "n",
+        ["local -n ref=x", "declare -rn ref=x"]),
+    "declare -g, 4.2": (_DECL + "g", ["declare -g G=1", "typeset -gx G"]),
+    "case-converting attribute -l/-u/-c, 4.0": (_DECL + "[luc]",
+        ["declare -l K", "local -u K", "typeset -x -l K"]),
+    "local -, 4.4": (r"\blocal\s+-(?=\s|$|;)", ["local -", "local - ; set -f"]),
+    "mapfile, readarray or coproc, 4.0": (r"\b(mapfile|readarray|coproc)\b",
+        ["mapfile -t L < f", "readarray L", "coproc cat"]),
+    "case modification, 4.0": (r"\$\{" + _NAME + r"(\[[^]]*\])?(,,?|\^\^?)",
+        ['x="${x,,}"', 'K="${1,,}"', 'K="${TOOL,,[A-Z]}"', 'K="${x^}"', 'K="${a[0]^^}"',
+         'K="${@,,}"']),
+    "parameter transformation, 4.4": (r"\$\{[^}]*@[QEPAaKkUuL]\}",
+        ['echo "${x@Q}"', 'echo "${a[@]@Q}"']),
+    "-v or -R test, 4.2/4.3": (r"(\[\[|\[|\btest)\s+(!\s+)?-[vR]\s",
+        ["[[ -v X ]] || exit", "[ -v X ] || true", "test -v X || true", "[[ ! -v X ]]",
+         "if [ -v X ]; then :; fi", "[[ -R ref ]]"]),
+    "EPOCHSECONDS, EPOCHREALTIME, BASHPID, SRANDOM or BASH_ARGV0":
+        (r"\b(EPOCHSECONDS|EPOCHREALTIME|BASHPID|SRANDOM|BASH_ARGV0)\b",
+         ["NOW=$EPOCHSECONDS", "echo ${BASHPID}"]),
+    "&>>, 4.0": (r"&>>", ["echo x &>> f", "echo x&>>f"]),
+    "|&, 4.0": (r"\|&(?![]])", ["cmd |& tee f", "cmd|&tee f"]),
+    "case fall-through, 4.0": (r";;?&(?![&\]])",
+        ["a) x ;&", "a) x ;;&", "case $x in a) echo a;& b) echo b;; esac"]),
+    "negative substring length, 4.2": (r"\$\{" + _NAME + r"(\[[^]]*\])?:[^}:]*:\s*-",
+        ['echo "${x:0:-1}"', 'K="${CMD:0:-$n}"', 'K="${1:0:-1}"', 'K="${x: 1 : -2}"',
+         'K="${a[0]:1:-1}"']),
+    "negative array index, 4.3": (r"\b[A-Za-z_][A-Za-z0-9_]*\[\s*-[^]]*\]",
+        ['echo "${a[-1]}"', 'K="${a[-1]:-x}"', 'K="${a[ -1 ]}"', 'K="${a[-$n]}"',
+         "a[-1]=x"]),
+    "shopt option newer than 3.2": (
+        r"\bshopt\s+(-[a-z]+\s+)*[^;\n]*\b(autocd|checkjobs|dirspell|globstar|lastpipe|"
+        r"direxpand|globasciiranges|inherit_errexit|localvar_inherit|localvar_unset|"
+        r"assoc_expand_once|progcomp_alias|complete_fullquote|patsub_replacement|"
+        r"varredir_close|noexpand_translation|globskipdots|compat3[2-9]|compat4[0-9])\b",
+        ["shopt -s lastpipe", "shopt -s inherit_errexit", "shopt -s nullglob globstar"]),
+    "wait -n/-f/-p, 4.3+": (r"\bwait\s+-[a-z]*[nfp]", ["wait -n", "wait -fn $p"]),
+    "{varname} redirection, 4.1": (r"(?<![$\w])\{[A-Za-z_][A-Za-z0-9_]*\}(<>|>>?|<|>&|<&)",
+        ["exec {fd}>/dev/null", "exec {fd}<f", "exec {fd}>&-"]),
+    "read -N or -i, 4.0/4.1": (r"\bread\s+(-[a-zA-Z]+\s+)*-[a-zA-Z]*[Ni]",
+        ["read -N 3 K", "read -r -N 1 K", "read -e -i x K"]),
+    "brace sequence step or zero padding, 4.0":
+        (r"\{-?[0-9a-zA-Z]+\.\.-?[0-9a-zA-Z]+\.\.|\{-?0[0-9]+\.\.",
+         ["for i in {1..10..2}; do :; done", "echo {01..10}"]),
+    # Only `case` opening the substitution: bash before 4.0 reads the first
+    # pattern's `)` as the end of `$(`. A `case` later inside `$( )` is not seen.
+    "case opening a command substitution": (r"\$\(\s*case\s",
+        ['K="$(case $TOOL in Bash) echo b;; esac)"']),
 }
+
+# Bash 3.2 forms near the patterns above that must stay unflagged.
+BASH_3_2_LOOKALIKES = [
+    'x="${x:-a}"', 'x="${x: -1}"', 'x="${a[${#a[@]}-1]}"', "RE='[^|;&]'",
+    "RE='(^|[^-[:alnum:]_])git'", 'local x=$(echo -n y)', "read -r -d '' INPUT",
+    "grep -v x f", 'printf "%s" "$x"', 'echo "${#a[@]}" "${!x}"', "x+=(y)",
+    '[ -n "$x" ]', "local LC_ALL=C", "echo {a,b}", "for i in {1..3}; do :; done",
+    'echo "${x/#a/b}"', "shopt -s nullglob", "wait $p", 'echo "${!pre@}"',
+]
+
+
+def bash_3_2_scan(paths):
+    """Hits of LATER_THAN_BASH_3_2 in `paths`, one string per (line, row)."""
+    hits = []
+    for h in paths:
+        for n, line in enumerate(h.read_text(encoding="utf-8").splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            for name, (pat, _) in LATER_THAN_BASH_3_2.items():
+                if re.search(pat, line):
+                    hits.append("%s:%d %s: %s" % (h.name, n, name, line.strip()[:80]))
+    return hits
 
 
 class HooksRunOnBash32(unittest.TestCase):
@@ -434,23 +494,34 @@ class HooksRunOnBash32(unittest.TestCase):
     hooks need nothing a 3.2 shell lacks, from the list above. A construct the
     list does not name is not caught."""
 
-    def test_each_pattern_catches_its_example(self):
-        for name, (pat, example) in LATER_THAN_BASH_3_2.items():
-            with self.subTest(name=name):
-                self.assertRegex(example, pat)
+    def test_each_pattern_catches_every_listed_spelling(self):
+        for name, (pat, examples) in LATER_THAN_BASH_3_2.items():
+            for ex in examples:
+                with self.subTest(name=name, example=ex):
+                    self.assertRegex(ex, pat)
+
+    def test_bash_3_2_lookalikes_are_not_flagged(self):
+        for line in BASH_3_2_LOOKALIKES:
+            for name, (pat, _) in LATER_THAN_BASH_3_2.items():
+                with self.subTest(line=line, name=name):
+                    self.assertNotRegex(line, pat)
+
+    def test_the_scan_reports_every_spelling_planted_in_a_hook(self):
+        d = Path(tempfile.mkdtemp(prefix="bash32-scan-"))
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        planted = [ex for _, examples in LATER_THAN_BASH_3_2.values() for ex in examples]
+        hook = d / "planted.sh"
+        hook.write_text("#!/bin/bash\n# a comment: [ -v X ] is not code\n"
+                        + "\n".join(planted) + "\n", encoding="utf-8")
+        flagged = {int(h.split(":")[1].split()[0]) for h in bash_3_2_scan([hook])}
+        missed = [ex for n, ex in enumerate(planted, 3) if n not in flagged]
+        self.assertEqual(missed, [])
+        self.assertNotIn(2, flagged)
 
     def test_no_hook_uses_syntax_later_than_bash_3_2(self):
         hooks = sorted((REPO / ".claude" / "hooks").rglob("*.sh"))
         self.assertIn("log-escape.sh", [h.name for h in hooks])
-        hits = []
-        for h in hooks:
-            for n, line in enumerate(h.read_text(encoding="utf-8").splitlines(), 1):
-                if line.lstrip().startswith("#"):
-                    continue
-                for name, (pat, _) in LATER_THAN_BASH_3_2.items():
-                    if re.search(pat, line):
-                        hits.append("%s:%d %s: %s" % (h.name, n, name, line.strip()[:80]))
-        self.assertEqual(hits, [])
+        self.assertEqual(bash_3_2_scan(hooks), [])
 
 
 def scope_rules():

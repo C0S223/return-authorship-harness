@@ -68,7 +68,7 @@ cloud environment, or a self-hosted runner.
 
 Partway through this step, a `session-close: stranded work` note may appear at the end of a
 turn. It counts changed files and commits not yet on the main branch, which this step has
-until its pull request is merged. Here it is expected: tell them it is not an error.
+until its pull request is merged. Here it is expected: tell them it is not an error, do not offer `/closeout`, and repeat in full the STOP instruction you had just given (usually the `revoke-policy` request in d), because your earlier message is no longer the last one.
 
 **a. Unlock the files.** The guard's files are policy files, and only the person can unlock
 them. On their own computer or a self-hosted runner, **STOP** and ask them to send this as a
@@ -173,12 +173,12 @@ and give them this walkthrough, with their repository's link, in your last messa
    sidebar, open **Rules**, then **Rulesets**.
 2. Click **New ruleset**, then **New branch ruleset**.
 3. Give it any name, for example `protect main`. Set **Enforcement status** to **Active**.
-4. Under **Bypass list**, click **Add bypass** and add only yourself: your own account, or a
+4. Under **Bypass list**, click **Add bypass**, tick only yourself, then click **Add Selected**: your own account, or a
    role only you hold (on a personal repository, **Repository admin**, if only you are an
-   admin). Never the agent's login or a role it has: anyone on this list skips every rule.
+   admin). Never the agent's login or a role it has: anyone on this list skips every rule. Check that the list now shows exactly that one entry.
 5. Under **Target branches**, click **Add target**, then **Include default branch**.
-6. Under the rules, leave the ones already ticked and tick **Require status checks to
-   pass**. Click **Add checks**, type `gate` and pick it, then do the same for
+6. Under **Branch protections**, leave the ones already ticked and tick **Require status checks to
+   pass**. Click its button for adding checks (GitHub's help calls it **Add selected status checks**; on screen it may read **Add checks**), type `gate` and pick it, then do the same for
    `operator-merge`. They are offered only once GitHub has run them, which the setup pull
    request did in step 3.
 7. Click **Create** at the bottom.
