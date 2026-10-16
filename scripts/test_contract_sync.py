@@ -100,8 +100,13 @@ class RosterSync(unittest.TestCase):
 # unlock_consume.py is a shared module imported by net-post.py and
 # env-global.py, not independently wired -- correctly
 # absent from settings.json's hooks tree. log-escape.py and log-escape-fast.sh
-# are log-escape.sh's helpers, run by it, not by settings.json.
-SHARED_HOOKS = {"unlock_consume.py", "log-escape.py", "log-escape-fast.sh"}
+# are log-escape.sh's helpers, run by it, not by settings.json. run-python.sh
+# is the launcher every Python hook's command starts (lane 6175): shared by
+# all of them, so it is never the hook a command exists to run.
+SHARED_HOOKS = {"unlock_consume.py", "log-escape.py", "log-escape-fast.sh", "run-python.sh"}
+# The LAST quoted project path in a command is its hook: the guard's `f=` path
+# for a shell hook, the .py after the launcher for a Python hook (lane 6175).
+PROJECT_PATH_RE = re.compile(r'"\$\{?CLAUDE_PROJECT_DIR\}?/([^"]+)"')
 
 
 def wired_basenames(settings):
@@ -116,7 +121,8 @@ def wired_basenames(settings):
         if isinstance(node, dict):
             cmd = node.get("command")
             if isinstance(cmd, str) and cmd.strip():
-                token = cmd.split()[-1].strip('"')
+                paths = PROJECT_PATH_RE.findall(cmd)
+                token = paths[-1] if paths else cmd.split()[-1].strip('"')
                 names.add(Path(token.replace("\\", "/")).name)
             for v in node.values():
                 walk(v)

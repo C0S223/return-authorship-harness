@@ -1,0 +1,15 @@
+# DID-SWING2: lane 6175 wiring (grant widened via hub relay: preflight.sh, test_contract_sync.py)
+- **Command shape:** every hook command is now `f="$CLAUDE_PROJECT_DIR/.claude/hooks/<file>"; [ -f "$f" ] || { echo "Safety check file missing: $f. ..." >&2; exit 2; }; bash "$f"`. Each Python hook adds its `.py` after `"$f"`, with `<file>` = `run-python.sh`. A missing file gives exit 2. The hook's own exit code, 1 included, passes through, because the guard only tests for the file.
+- **settings.json:** all 13 Python commands go through the launcher; of the 7 bash rows, 6 carry the guard and 1 is legacy (Departure 2).
+- **Departure 1:** Stop (session-close.sh) exits **1** on a missing file, not 2. Exit 2 on Stop refuses the stop, so a missing file would loop forever; session-close.sh's own `stop_hook_active` note names that loop.
+- **Departure 2:** the PostToolUse `auto-compact/check.sh` row keeps its old string. `scripts/test_failure_hooks.py` pins it byte for byte and is outside the grant. On PostToolUse neither 127 nor 2 blocks, and preflight still blocks every prompt if the file is gone. To fix: grant `scripts/test_failure_hooks.py` and update its NOT_FOR_FAILURES string.
+- **preflight.sh:** checks every quoted `"$CLAUDE_PROJECT_DIR/..."` path in each command. It blocks a command that names none, and needs `bash`. When any command uses run-python.sh it probes python3, then python, as Python 3. It still blocks on missing jq.
+- **test_contract_sync:** `run-python.sh` is in SHARED_HOOKS, and a command's hook is its last quoted project path. Mutant check: dropping spawn-roster's wiring from a copy is still caught.
+- **test_settings_portable:** pins the exact string for every command; no `python` runs outside the launcher. **run-python.sh:** its missing-hook message now matches the guard's.
+- **tests/test_run_python.py**, new class Wiring. It runs the real command strings under sh and bash on a copied `.claude/`. Cases: missing launcher (every Python row gives 2); missing hook file (2); missing preflight.sh (2); stale CLAUDE_PROJECT_DIR (every row 2, Stop 1, never 127); no Python on PATH (2); a hook's own exit 1 stays 1. It runs real preflight in five cases: whole tree (0); missing hook (2); missing launcher (2); no Python (2); no jq (2).
+- **Unverified:** I assumed Claude Code hands commands to sh or bash, and the tests cover both. A user shell such as fish would break the guard syntax.
+- `CLAUDE_PROJECT_DIR=<worktree> bash .claude/hooks/preflight.sh`: rc 0
+- `python3 tests/test_run_python.py`: `Ran 21 tests ... OK`
+- `python3 scripts/test_contract_sync.py`: `Ran 4 tests ... OK`. `python3 scripts/test_settings_portable.py`: `Ran 4 tests ... OK`
+- `python3 scripts/run_tests.py`: `38 suites: 38 pass, 0 fail, 0 skip (9 tests skipped inside 4 passing suites)`
+- Commit sha: in the hub reply (a file cannot carry its own commit's sha). No push.

@@ -1,0 +1,19 @@
+# DID-SWING3: lane 6175 round-1 repairs (grant unchanged; built on e63899f)
+- **SE F2 (C1):** the new `PY2_HELPER` fake `python` reports major version 2 to the version probe and prints PY2RAN for anything else. Two new tests use it. `RunPython.test_python_2_is_refused`: the launcher gives rc 2, empty stdout, no PY2RAN, and "no Python 3 found". `Wiring.test_preflight_refuses_python_2`: preflight gives rc 2 and "no Python 3 found". I also corrected the Store-stub test's comment, which had claimed Python 2 coverage.
+- **SE F1 (C3):** preflight again checks each command's interpreter with `command -v`. That is the first word after the guard (matched by `guard_re`), or the first word of an unguarded row. Test: `test_preflight_checks_the_interpreter_of_an_unlaunched_row` adds a `python "$CLAUDE_PROJECT_DIR/.claude/hooks/git-guard.py"` row with PATH = bash, jq, python3. Result: rc 2 and `interpreter 'python' not found`.
+- **SE M3:** `test_preflight_blocks_a_row_naming_no_project_file` adds an `echo hi` row; preflight gives rc 2 and "names no project file".
+- **Mutants**, each run on a scratch copy of the tree, with `python3 -B tests/test_run_python.py` run against each. All four were killed, each with `FAILED (failures=1)`:
+  - M1: the launcher probe set to `sys.exit(0)`.
+  - M2: preflight's probe set to `sys.exit(0)`.
+  - M3: the names-no-project-file line set to `:`.
+  - F1 revert: the interpreter `command -v` line set to `:`.
+- **AR C1-C7:** applied to SETUP.md. Only line wrapping differs from the grill's text. Each grill `new:` string, plus the C6 (a) sentence, was checked by a script that collapses whitespace: 8 of 8 found verbatim. C1 and C2 are one combined text in step 3d. C6 uses option (a), after item 4 in step 7. The AR notes for polish are not applied.
+- **C3 probe** of `git remote set-url setup-probe https://example.invalid/probe.git` against `.claude/hooks/git-guard.py`, in a scratch repo:
+  - With CLAUDE_CODE_REMOTE unset: `permissionDecision: deny` ("git-guard: git remote add/set-url/se...").
+  - With CLAUDE_CODE_REMOTE=true: the same deny.
+  - Run directly with no hook: `error: No such remote 'setup-probe'`, rc 2. `git config --list --local` was byte-identical before and after (`cmp`).
+- **Noticed (C4):** `git config core.hooksPath .githooks` is allowed by both git-guard and policy-mutate, host and cloud. So the step works, and the typed `auth-policy .git/config` is not what lets it through.
+- `CLAUDE_PROJECT_DIR=<worktree> bash .claude/hooks/preflight.sh`: rc 0
+- `python3 tests/test_run_python.py`: `Ran 25 tests ... OK`
+- `python3 scripts/run_tests.py`: `38 suites: 38 pass, 0 fail, 0 skip (9 tests skipped inside 4 passing suites)`
+- Commit sha: in the hub reply. No push.
