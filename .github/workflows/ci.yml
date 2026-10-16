@@ -1,0 +1,162 @@
+# The CI gate on PRs to the default branch, split into the two checks
+# the default-branch ruleset requires: `gate` = (b) stamp gate + (c) suite, where red on
+# a ready PR is a surprise; `operator-merge` = (a) policy-path check, where
+# (a)'s exit 1 means the operator merges. The job ids ARE the ruleset's required contexts; renaming
+# one blocks every PR. Inside `gate` each step is reported even when the
+# earlier one fails. This workflow and the gate scripts (a, b) run from
+# the default branch's checkout at base/, so a PR cannot edit its own gate
+# (pull_request_target); the suite (c) is the PR's own, and runs only when the
+# PR's head repository is this repository: a fork's head is refused, never
+# executed. PR head code runs with a read-only token and no secrets. Every
+# action is pinned by full commit sha; a tag can be moved.
+# On a draft both jobs fail at their first step, so a draft's
+# required checks read red, never passing. (b) and (c) still start on a draft
+# (`!cancelled()`) but fail at once: no checkout ran, so head/ does not exist.
+# ready_for_review runs the jobs on the code that will merge; a draft push
+# costs only a job start.
+# NEVER ADD A CACHE (actions/cache, setup-python `cache:`): under
+# pull_request_target the PR's code would run inside the base's cache scope, and
+# a poisoned cache is a gate edit by another door.
+# The base is the repository's default branch, whatever its name: a PR into any
+# other branch fails each job before a checkout (base/ would be that branch's
+# scripts; a skipped job would read as passing), and both scripts get it as
+# --base, never a guess.
+name: ci
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      HEAD_REF: ${{ github.head_ref }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Fail on a draft PR
+        if: ${{ github.event.pull_request.draft }}
+        run: |
+          echo "This check is not run on a draft PR; marking the PR ready for review runs it." >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - name: Refuse a PR whose head is another repository
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+            echo "The suite runs only for a PR whose head is this repository." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+      - name: Refuse a PR whose base is not the default branch
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          if [ "$BASE_REF" != "$DEFAULT_BRANCH" ]; then
+            echo "This check runs only for a PR into the default branch ($DEFAULT_BRANCH)." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+      # Under pull_request_target the checkout's default ref is the PR's base branch,
+      # which the step above has pinned to the default branch.
+      - name: Checkout base
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          path: base
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: head
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Install the suite's third-party package
+        run: pip install pyyaml
+      - name: (b) stamp gate, base's script against the PR head
+        id: stamp
+        if: ${{ !cancelled() }}
+        working-directory: head
+        run: |
+          git branch -f "$HEAD_REF" "$HEAD_SHA"
+          rc=0
+          python ../base/scripts/stamp_check.py --base "origin/$DEFAULT_BRANCH" --head "$HEAD_REF" || rc=$?
+          echo "- (b) stamp gate: $([ "$rc" -eq 0 ] && echo PASS || echo "FAIL (exit $rc)")" >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+      - name: (c) suite, the PR's own runner
+        id: suite
+        if: ${{ !cancelled() && github.event.pull_request.head.repo.full_name == github.repository }}
+        working-directory: head
+        run: |
+          git config core.hooksPath .githooks
+          rc=0
+          python scripts/run_tests.py || rc=$?
+          echo "- (c) suite: $([ "$rc" -eq 0 ] && echo PASS || echo "FAIL (exit $rc)")" >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+  # On a ready PR, exit 1 from (a) is not a failure: it is the operator's cue
+  # that this PR touches a policy path and is the operator's to merge. Any other red on a
+  # ready PR is the checker not running (exit 2), which is a surprise like any
+  # other; a draft's red is the guard step. Stdlib only, no pip step.
+  operator-merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Fail on a draft PR
+        if: ${{ github.event.pull_request.draft }}
+        run: |
+          echo "This check is not run on a draft PR; marking the PR ready for review runs it." >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - name: Refuse a PR whose base is not the default branch
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          if [ "$BASE_REF" != "$DEFAULT_BRANCH" ]; then
+            echo "This check runs only for a PR into the default branch ($DEFAULT_BRANCH)." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+      - name: Checkout base
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          path: base
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Checkout PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: head
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: (a) policy-path check, base's script over the PR diff
+        id: policy
+        run: |
+          rc=0
+          python base/scripts/ci_policy_check.py --repo head --base "origin/$DEFAULT_BRANCH" || rc=$?
+          # Exit 1 is the checker's verdict; anything else is the checker not
+          # running (predicate did not load, git failed) and no cue to merge.
+          case "$rc" in
+            0) verdict="PASS" ;;
+            1) verdict="FAIL (exit 1) -- a policy path: the operator merges" ;;
+            *) verdict="FAIL (exit $rc) -- could not run: a surprise, stop and report" ;;
+          esac
+          echo "- (a) policy-path check: $verdict" >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"

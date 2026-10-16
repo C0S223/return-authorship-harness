@@ -1,0 +1,7 @@
+.agent-log/
+tmp/
+.tmp/
+worktrees/
+__pycache__/
+*.pyc
+.claude/hooks/auto-compact/state.json

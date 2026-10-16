@@ -1,0 +1,69 @@
+#!/bin/sh
+# pre-push-dispatcher -- the bootstrap half.
+#
+# This file is the TRACKED, REVIEWABLE SOURCE. The copy that actually runs is
+# installed unversioned at the repository's common hooks directory
+# (`.git/hooks/pre-push`) and is NOT this file. Keep them identical;
+# `scripts/test_prepush_install.py` is what reads that back.
+#
+# WHY A DISPATCHER AT ALL. The reviewed policy lives in the tree at
+# `.githooks/pre-push` so it is versioned, reviewed, and carried by a clone.
+# But git only runs hooks it can find, and an absent hook cannot object -- it
+# is indistinguishable from "no hook configured", so a checkout lacking the
+# policy would push silently ungated. Putting something ALWAYS PRESENT in the
+# resolution path is the only way to make absence loud, and that is this file's
+# entire job: locate the policy for the worktree the push came from, and refuse
+# the push if there isn't one.
+#
+# WHY NOT core.hooksPath (Windows and self-hosted; managed cloud sets
+# core.hooksPath from its setup script, see docs/enforcement/CLAUDE.md, Setup
+# per target). On a host it is unnecessary and strictly worse. The common
+# hooks directory is shared by the main worktree AND every linked worktree, so
+# one installed copy covers all of them. A *relative* core.hooksPath, by
+# contrast, resolves against each worktree's own top level, so a worktree whose
+# branch predates the policy would find nothing -- and fail OPEN, silently.
+# Measured on Git for Windows 2.54.0: the common dispatcher fires from both the
+# main and a linked worktree, blocks when the policy is absent in either, and
+# reaches the policy when present.
+#
+# WHAT THIS DOES NOT COVER, stated rather than discovered later:
+#   - `--no-verify` skips pre-push entirely. Nothing client-side changes that.
+#   - A fresh clone carries the tracked policy but NOT this installed copy;
+#     git deliberately does not activate repository-supplied hooks on clone.
+#     Every clone needs the one-time install. A client hook cannot close that.
+#   - Deleting the installed copy silently disables the gate. A removed hook
+#     reports nothing. Only a server-side check covers that: now a
+#     ruleset on the default branch requires the CI checks, but an admin identity
+#     bypasses it, so this client-side gate is still load-bearing.
+#   - SUBMODULES ARE UNGATED. A submodule's own common git dir is
+#     <parent>/.git/modules/<name>, so the dispatcher installed for the parent is
+#     never consulted and a push from inside a submodule runs no hook at all
+#     (measured: rc=0, no hook output). Latent today -- this repo has no
+#     .gitmodules and no gitlink entries -- so re-run that probe if one is added.
+set -u
+
+fail() {
+    printf 'pre-push: BLOCKED: %s\n' "$*" >&2
+    exit 1
+}
+
+inside=$(git rev-parse --is-inside-work-tree 2>/dev/null) ||
+    fail 'cannot inspect the current git worktree'
+
+test "$inside" = true ||
+    fail 'push was not started from a working tree'
+
+top=$(git rev-parse --show-toplevel 2>/dev/null) ||
+    fail 'cannot determine the current worktree root'
+
+policy=$top/.githooks/pre-push
+
+test -f "$policy" ||
+    fail "this checkout lacks the tracked hook: $policy -- merge the default branch, or push with the gate knowingly absent"
+
+# `/bin/sh <file>` rather than executing it directly: under Git for Windows the
+# POSIX executable bit is not dependable, so relying on it would make the gate's
+# presence a property of the filesystem rather than of the tree. Arguments are
+# forwarded and stdin is deliberately left untouched -- the policy reads the ref
+# update records from it.
+exec /bin/sh "$policy" "$@"

@@ -1,0 +1,174 @@
+#!/bin/sh
+# pre-push: refuses every push this hook cannot prove safe.
+#
+# Decision procedure, per pushed ref:
+#   1. The destination must be the approved origin (two spellings: with and
+#      without `.git`). Anything else is refused.
+#   1a. The default branch is origin's, read from refs/remotes/origin/HEAD
+#      (whatever its name). Unset, or naming no commit: every push is refused
+#      until `git remote set-head origin --auto` records it.
+#   2. Tag pushes are refused, deletions included: the tag rule runs before
+#      the deletion skip, so it catches a tag deletion too.
+#   3. Only refs/heads/* is accepted, and only well-formed names.
+#   4. A default-branch push from an agent shell (CLAUDECODE set) is refused;
+#      the human pushes the default branch.
+#   5. Deletion of the default branch is refused, by name and only as a
+#      deletion. Any other branch deletion is allowed.
+#   6. A branch update must be a readable commit that fast-forwards the
+#      remote tip. A new branch has nothing to prove ancestry against.
+#
+# Operator setup: set APPROVED_ORIGIN_URL to this repository's origin, then
+# install per target (`docs/enforcement/CLAUDE.md`, Setup per target): the
+# dispatcher copy on Windows and self-hosted, core.hooksPath on managed cloud.
+# Until then every push is refused (unarmed), the fail-closed default.
+
+set -f  # disable pathname expansion: `set -- $line` below must not glob.
+
+APPROVED_ORIGIN_URL="https://github.com/OWNER/REPO.git"   # operator sets this
+ZERO_OID="0000000000000000000000000000000000000000"
+
+deny() {
+    # Never echo the destination URL or argv1: either can carry a path or
+    # embedded credentials.
+    echo "$1" >&2
+    exit 1
+}
+
+is_valid_oid() {
+    # Exactly 40 lowercase hex characters (SHA-1 object format). A future
+    # object-format migration must fail closed here until requalified.
+    oid="$1"
+    if [ "${#oid}" -ne 40 ]; then
+        return 1
+    fi
+    case "$oid" in
+        *[!0-9a-f]*) return 1 ;;
+    esac
+    return 0
+}
+
+if [ "$#" -ne 2 ]; then
+    deny "invalid pre-push invocation"
+fi
+
+# argv1 (remote name) is intentionally ignored and never logged: it can be a
+# path or URL rather than a name.
+remote_url="$2"
+
+# A cloud clone's origin is the same repo spelled without the `.git` suffix.
+# Compare the two accepted spellings of one URL, nothing looser: no host,
+# owner or repo may differ. This file must stay mode 100755, or git ignores
+# it outright on POSIX.
+if [ "$remote_url" != "$APPROVED_ORIGIN_URL" ]    && [ "$remote_url" != "${APPROVED_ORIGIN_URL%.git}" ]; then
+    deny "push destination is not the approved origin"
+fi
+
+# 1a. Never a guessed name: a missing or dangling origin/HEAD refuses the push.
+default_target=$(git symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null) ||
+    deny "origin's default branch cannot be resolved (refs/remotes/origin/HEAD unset); run: git remote set-head origin --auto"
+case "$default_target" in
+    refs/remotes/origin/?*) ;;
+    *) deny "origin's default branch cannot be resolved (origin/HEAD is not under refs/remotes/origin/)" ;;
+esac
+if ! git --no-replace-objects rev-parse -q --verify "${default_target}^{commit}" >/dev/null 2>&1; then
+    deny "origin's default branch cannot be resolved (origin/HEAD names no commit); run: git remote set-head origin --auto"
+fi
+DEFAULT_REF="refs/heads/${default_target#refs/remotes/origin/}"
+
+line=""
+while IFS= read -r line; do
+    # Split on ASCII whitespace into exactly four nonempty fields.
+    set -- $line
+    if [ "$#" -ne 4 ]; then
+        deny "malformed pre-push input"
+    fi
+    local_ref="$1"
+    local_oid="$2"
+    remote_ref="$3"
+    remote_oid="$4"
+
+    if ! is_valid_oid "$local_oid" || ! is_valid_oid "$remote_oid"; then
+        deny "malformed pre-push input"
+    fi
+
+    local_is_zero=0
+    remote_is_zero=0
+    [ "$local_oid" = "$ZERO_OID" ] && local_is_zero=1
+    [ "$remote_oid" = "$ZERO_OID" ] && remote_is_zero=1
+
+    if [ "$local_is_zero" -eq 1 ] && [ "$remote_is_zero" -eq 1 ]; then
+        deny "invalid all-zero ref update"
+    fi
+    if [ "$local_is_zero" -eq 1 ] && [ "$local_ref" != "(delete)" ]; then
+        deny "inconsistent deletion input"
+    fi
+    if [ "$local_is_zero" -eq 0 ] && [ "$local_ref" = "(delete)" ]; then
+        deny "inconsistent deletion input"
+    fi
+
+    # Tag rule runs before the deletion skip below, so a tag deletion is
+    # denied here, by the tag rule.
+    case "$remote_ref" in
+        refs/tags/*) deny "tag pushes are prohibited" ;;
+    esac
+
+    case "$remote_ref" in
+        refs/heads/?*) ;;
+        *) deny "unsupported remote ref namespace" ;;
+    esac
+
+    if ! git check-ref-format "$remote_ref" >/dev/null 2>&1; then
+        deny "invalid remote branch ref"
+    fi
+
+    # A default-branch push issued from a script body passes git-guard, which
+    # reads command text only. Claude Code sets CLAUDECODE=1 in every tool
+    # shell and script bodies inherit it; the operator's own terminal never
+    # has it, so it tells the two actors apart. Default-branch pushes only:
+    # deletion is below. Ceiling: `env -u CLAUDECODE` (the text gate's job).
+    if [ -n "${CLAUDECODE:-}" ] && [ "$local_is_zero" -eq 0 ] && [ "$remote_ref" = "$DEFAULT_REF" ]; then
+        deny "default-branch push from an agent shell (CLAUDECODE set) is prohibited; the human pushes the default branch"
+    fi
+
+    # Deletion of the default branch is denied here, by name and only as a
+    # deletion. This must run before the deletion-skip below,
+    # and after the tag/namespace checks above so it only ever fires for an
+    # actual default-branch deletion, never masking a different rule.
+    if [ "$local_is_zero" -eq 1 ] && [ "$remote_ref" = "$DEFAULT_REF" ]; then
+        deny "deletion of the default branch is prohibited"
+    fi
+
+    if [ "$local_is_zero" -eq 1 ]; then
+        # A zero local OID is an ordinary branch deletion. Skip commit-existence and ancestry entirely and allow.
+        line=""
+        continue
+    fi
+
+    if ! git --no-replace-objects cat-file -e "${local_oid}^{commit}" >/dev/null 2>&1; then
+        deny "proposed branch tip is not a readable commit"
+    fi
+
+    if [ "$remote_is_zero" -eq 1 ]; then
+        # New branch: nothing to prove ancestry against.
+        line=""
+        continue
+    fi
+
+    git --no-replace-objects merge-base --is-ancestor "$remote_oid" "$local_oid"
+    status=$?
+    case "$status" in
+        0) ;;
+        1) deny "non-fast-forward branch update is prohibited" ;;
+        *) deny "cannot prove branch update is fast-forward" ;;
+    esac
+
+    line=""
+done
+
+if [ -n "$line" ]; then
+    # read exited on EOF with residual, un-newline-terminated content: the
+    # last line was never validated as a complete tuple.
+    deny "cannot read complete pre-push input"
+fi
+
+exit 0
