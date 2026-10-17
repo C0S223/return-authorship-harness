@@ -20,6 +20,8 @@ review step before any change lands in your project.
 2. Clone your copy, open it in Claude Code, and say: **read SETUP.md and set me up**.
 3. The agent walks you through the rest one step at a time, and stops whenever a step is
    yours to do.
+4. After setup, say **onboard me** at any time for a short tour of how deciding, building
+   and review work here.
 
 If Claude Code answers with `PREFLIGHT BLOCK`, a tool from the list above is missing or
 too old.

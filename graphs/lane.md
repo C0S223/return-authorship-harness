@@ -13,7 +13,7 @@ in the change that made it.
 
 **Machinery.** The field lists what a run may dispatch, in order. `recall` runs only when
 step 1's search of prior rulings calls for a memory sweep; a run that skips it departs from
-nothing. `Explore` on Haiku may draft the PR body at step 4 as the **scribe**
+nothing. `Explore` on the light tier (Haiku) may draft the PR body at step 4 as the **scribe**
 ([`../roles/scribe.md`](../roles/scribe.md)); it is not in the field, because it judges nothing.
 
 ## When to run
@@ -73,6 +73,8 @@ Write **`WORK-ORDER.md`** into `work/<id>-<slug>/`, **one screen at most (40 lin
   done, which the builder may see (for a test gap, the check is that the suite fails each
   mutant the code reviewer plants);
 - the files the builder may edit, everything else frozen;
+- **estimated human time**, one bucket: `<15 min`, `15 min-1 h`, `1-4 h`, `>4 h` (the
+  SWE-bench Verified buckets); human estimates run optimistic, so round up when unsure;
 - the suites the change owes, its **blast radius**: every suite whose subject the diff
   touches;
 - the reviewer for each kind the fence names, planned now (§ Review is by kind).
@@ -80,12 +82,33 @@ Write **`WORK-ORDER.md`** into `work/<id>-<slug>/`, **one screen at most (40 lin
 Search prior rulings and existing mechanisms before commissioning a new one, and name hits
 and misses in one line. Recalled rules are never authorization.
 
-**Model routing.** Dispatch each build on the model the operator names, or else the agent
-definition's default. **A reviewer never runs on Haiku**: Haiku writes, Sonnet or above
-checks. Every reviewer dispatch line states `builder=<model> dispatched=<model>`; a line
-missing a value is a breach. A follow-up whose fix the review states line by line (an exact
-repair) and that touches only copy, cites or markup, with no logic change, the hub pastes
-inline; it never resumes a builder for it.
+**Model routing: the cascade.** Four tiers, one row per agent tool; another tool adds its
+own row later. Where a tier's model is unavailable, use the next tier up; with none above
+available, use the highest available tier below it and say so in the reason.
+
+| Tool | light | mid | heavy | top |
+|---|---|---|---|---|
+| Claude Code | haiku | sonnet | opus | fable |
+
+- **Builder:** the hub picks each swing's starting tier and leans light, the lowest tier
+  that fits the work, with the reason in one line on the dispatch, citing the work order's
+  time bucket.
+- **Reviewer:** one tier above that swing's builder, never below mid (Haiku writes, Sonnet
+  or above checks); a top-tier builder's reviewer stays on top.
+- **Escalation:** a swing that fails review moves the next swing's builder up one tier; the
+  hub may raise it further with a stated reason, and never lowers it within the lane.
+- **Top tier:** any dispatch on top needs the operator's yes first; declined, it runs on
+  heavy (or the highest available tier below top) and its reason starts `top declined`
+  (both hub-authored defaults, for cost). A model the operator names for a dispatch wins
+  over the cascade.
+
+Every builder and reviewer dispatch line states
+`builder=<tier/model> reviewer=<tier/model> reason=<one line>`; a line missing a value is a
+breach. At landing, the PR body records the time bucket, the swings taken and each one's
+tiers; that record, bucket included, is the data a later classifier will be tuned on. A
+follow-up whose fix the review states line by line (an exact repair) and that touches only
+copy, cites or markup, with no logic change, the hub pastes inline; it never resumes a
+builder for it.
 
 State "round N of M" (M is 1 for prose; 2 for code, the second only on a C1 or C2 finding)
 and the expected duration; the duration is a check-by for the hub, not a bound. Record the
@@ -215,8 +238,8 @@ and (b), then the lane's own (c).
 CI runs the same three on every PR (`.github/workflows/ci.yml`): `operator-merge` is (a),
 `gate` is (b) and (c), and a ruleset the operator sets requires both.
 
-**The PR body may come from the scribe.** Spawn `Explore` with `model: haiku`, its prompt
-being [`../roles/scribe.md`](../roles/scribe.md) followed by the input paths that file lists
+**The PR body may come from the scribe.** Spawn `Explore` on the light tier
+(`model: haiku`), its prompt being [`../roles/scribe.md`](../roles/scribe.md) followed by the input paths that file lists
 and the pasted `git log`/`git diff --stat` output. Log the spawn. Its return is data: the
 hub checks every number, sha, verdict and quote in it against the tree, corrects what is
 wrong itself, adds the attribution lines, and owns what it posts. The body is never

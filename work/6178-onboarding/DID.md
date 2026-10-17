@@ -1,0 +1,13 @@
+# DID: lane 6178, first-run onboarding (base 7b54e93, work order 2507adb)
+- **session-start.sh:** new block after the dirty-file warning. It greps `^APPROVED_ORIGIN_URL=` in `.githooks/pre-push`; empty or `*OWNER/REPO*` prints nothing; otherwise one `Say 'onboard me'` line naming ONBOARDING.md, only if `grills/` and `work/` are both absent. Plain `case`/`if`/`[ -d ]`, `|| true` on the grep; stays fail-quiet.
+- **test_session_start.py:** new class, 5 cases: placeholder (no line), armed+grills (no line), armed+work (no line), armed+neither (exactly one line), no pre-push file (no line).
+- **Red, mutants in scratch copies:** placeholder arm dropped -> `test_placeholder_present_no_line` FAIL; grills test dropped -> `test_armed_with_grills_no_line` FAIL; work test dropped -> `test_armed_with_work_no_line` FAIL (each `FAILED (failures=1)`).
+- **ONBOARDING.md (new):** 6 steps (purpose, grill, lane build, landing, red checks, start a grill frame-first), each ending in a question. It points to graphs/grill.md, graphs/lane.md, CLAUDE.md, docs/enforcement/CLAUDE.md and scripts/stamp_check.py, and adds no rule.
+- **SETUP.md:** step 8 ends by offering the tour and handing off to ONBOARDING.md. **README.md:** Get started item 4, "say onboard me".
+- `python3 tests/test_session_start.py`: `Ran 9 tests ... OK`.
+- `python3 tests/test_log_escape.py`: `OK (skipped=2)` (the bash 3.2 scan covers the new block).
+- `bash .claude/hooks/session-start.sh` on this tree: 0 nudge lines, because the placeholder is still in place.
+- `python3 scripts/run_tests.py`: `38 suites: 38 pass, 0 fail, 0 skip (9 tests skipped inside 4 passing suites)`.
+- **Problem with the trigger itself:** at 7b54e93 the template tracks 11 files under `grills/` and 15 under `work/`, and this lane adds more. A copy made from the template therefore has both folders, so the nudge never fires there. "onboard me" still works. The fix is outside this scope (operator decision): stop shipping those folders, or change the trigger.
+- **Binding defect:** the dispatch binding names role and desk paths this tree lacks. I used `roles/super-doer.md` and `work/`, as this tree's own binding does. WebFetch is not in this run's tool list, so the armed-run probe could not be attempted.
+- **Untouched:** every other file.

@@ -220,3 +220,8 @@ Summarize in a few lines what is now on, what is not, and anything left for them
 suggest they read `CLAUDE.md` and adjust it to their work. Its roster and size budget are
 pinned by tests (`scripts/test_contract_sync.py`, `scripts/test_claude_md_budget.py`), so
 change those in the same commit as the text.
+
+Last, offer the short tour: tell them that saying **onboard me** starts it, and when they
+say it, follow `ONBOARDING.md`. On their own computer, a new session also offers it until they
+finish or skip the tour; a managed cloud session or self-hosted runner does not offer it, but
+**onboard me** works there too.
