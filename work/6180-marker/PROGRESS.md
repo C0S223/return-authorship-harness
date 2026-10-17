@@ -6,7 +6,7 @@
 - [x] hub verify: 3 red on base, 25 green, 38/38
 - [x] senior-engineer r1: BLOCK, F1 (C3): no round 2 allowed; operator decides
 - [x] adversarial-reviewer r1: BLOCK, C1 exact repair; applied as dacb935
-- [x] adversarial-reviewer resume: APPROVE at 79921bc (C1 discharged)
+- [ ] adversarial-reviewer resume on the C1 repair
 - [ ] STOP: SE cap reached with BLOCK; operator rules (another round, or stop)
 
-Next step: operator rules on SE F1 (C3): another code round, or stop. No PR until then.
+Next step: resume adversarial-reviewer on dacb935, then report to the operator.
