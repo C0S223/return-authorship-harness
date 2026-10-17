@@ -3,15 +3,26 @@
 **Reader: the agent.** Start this whenever the person says **onboard me**, at any time,
 even after they have taken or skipped the tour before. A new session also offers it, in one
 session-start line, only when all three hold: the push guard is armed (`APPROVED_ORIGIN_URL`
-in `.githooks/pre-push` is no longer the `OWNER/REPO` placeholder), `.agent-log/onboarded`
-does not exist, and the session is not a cloud session (managed cloud or a self-hosted
-runner). A cloud session never shows that line, but **onboard me** works there too. If setup is not finished, say so and offer
+in `.githooks/pre-push` is no longer the `OWNER/REPO` placeholder), the marker
+`.agent-log/onboarded` does not exist (at the root of the main checkout, or of the current
+checkout if that is a different folder), and the session is not a cloud session (managed
+cloud or a self-hosted runner). A cloud session never shows that line, but **onboard me** works there too. If setup is not finished, say so and offer
 `SETUP.md` instead.
 
 **Ending or skipping.** At the end of step 7, or as soon as they say **skip** at any point,
-create the empty file `.agent-log/onboarded` (and the folder, if it is missing), and tell them plainly: it only stops the
-offer at the start of new sessions; it lives in a folder Git ignores, so nothing is
-committed; and saying **onboard me** still starts the tour.
+create the empty file `.agent-log/onboarded` (and the folder, if it is missing) at the root
+of the **main checkout**: the folder that holds the `.git` folder named by
+`git rev-parse --git-common-dir` (run it at the current checkout's root; a relative answer
+is relative to that root), or, if git fails or names no `.git` folder, the current
+checkout's root. If that folder is not the current checkout's root (you are in a lane
+worktree), writing there is a write outside this checkout (`CLAUDE.md` §2): first ask them
+one yes/no question naming the exact path; on yes, create it there; on no, create it at the
+current checkout's root and tell them the offer may come back in other worktrees. Tell them
+plainly: a marker in the main checkout covers it and every lane worktree, so the offer does
+not come back in each new worktree; it only stops the offer at the start of new sessions; it
+lives in a folder Git ignores, so nothing is committed; a fresh clone has no marker and
+offers the tour again at each new session until it is ended or skipped there; and saying
+**onboard me** still starts the tour.
 
 **How to run it.** One step per turn, one idea per message, in plain words. End each step
 with a plain question and wait for the reply. Put each step's text in your last message,
