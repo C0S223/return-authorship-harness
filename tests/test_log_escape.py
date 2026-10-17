@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -57,7 +58,7 @@ class LogEscapeCase(unittest.TestCase):
         # PATH holds only the tools the hook needs, jq left out (probe P1).
         bin_dir = self.root / "nojq-bin"
         bin_dir.mkdir()
-        for tool in ("bash", "mkdir", "tr", "sed", "cat", "python", "python3"):
+        for tool in ("bash", "mkdir", "tr", "sed", "cat", "date", "python", "python3"):
             found = shutil.which(tool)
             if found:
                 (bin_dir / tool).symlink_to(found)
@@ -78,6 +79,26 @@ class LogEscapeCase(unittest.TestCase):
         self.assertIn("git push origin lane", text)
         self.assertIn("UNPARSED (jq missing): Agent", text)
         self.assertNotIn("Read", text)    # a class the hook never logs stays silent
+
+    def test_the_line_carries_local_date_and_time(self):
+        # The stamp moved from bash's printf clock to `date` (board 6177).
+        before = time.strftime("%Y-%m-%d")
+        text = self.logged('{"tool_name":"Bash",%s}' % PUSH)
+        after = time.strftime("%Y-%m-%d")
+        names = sorted(p.name for p in (self.root / ".agent-log").glob("*.md"))
+        self.assertIn(names, (["%s.md" % before], ["%s.md" % after]))
+        self.assertRegex(text, r"^- \d\d:\d\d:\d\d \[log-escape\] push: git push origin lane\n$")
+
+    def test_a_failing_date_still_logs_the_line(self):
+        # The ERR trap stays, so a failed timestamp must not end the hook.
+        bin_dir = self.root / "baddate-bin"
+        bin_dir.mkdir()
+        (bin_dir / "date").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        (bin_dir / "date").chmod(0o755)
+        self.env["PATH"] = bin_dir.as_posix() + os.pathsep + self.env.get("PATH", "")
+        self.logged('{"tool_name":"Bash",%s}' % PUSH)
+        self.assertEqual((self.root / ".agent-log" / "undated.md").read_text(encoding="utf-8"),
+                         "- ??:??:?? [log-escape] push: git push origin lane\n")
 
     def test_a_push_is_logged(self):
         self.assertIn("push: git push origin lane",
@@ -285,6 +306,256 @@ class LogEscapeCase(unittest.TestCase):
                                    capture_output=True, env=self.env)
                 self.assertTrue(r.stdout.endswith(b"FAST=1"), r.stdout)
                 self.assertIn(b"TID='trig_abc'", r.stdout)
+
+
+class OnlyPython3OnPath(unittest.TestCase):
+    """A host with `python3` and no `python` still gets every scope line.
+
+    log-escape.sh's shell-scope and filetool-scope `--log` calls and
+    log-escape-fast.sh's log-escape.py call ran a bare `python`. With only
+    `python3` on PATH (macOS with a python.org or Homebrew install) each failed
+    quietly and the out-of-tree write logged nothing. They now start through
+    run-python.sh. PATH here holds only the tools the hooks use, `python3`
+    among them; the "slow" cases delete log-escape-fast.sh from the copy so the
+    two `--log` calls in log-escape.sh are what answer."""
+
+    setUp = LogEscapeCase.setUp
+
+    def run_hook(self, payload, fast=True):
+        if not fast:
+            (self.root / ".claude" / "hooks" / "log-escape-fast.sh").unlink()
+        bin_dir = self.root / "py3only-bin"
+        bin_dir.mkdir()
+        for tool in ("bash", "mkdir", "tr", "sed", "cat", "date", "jq"):
+            found = shutil.which(tool)
+            if found:
+                (bin_dir / tool).symlink_to(found)
+        (bin_dir / "python3").symlink_to(sys.executable)
+        self.assertIsNone(shutil.which("python", path=str(bin_dir)))
+        r = subprocess.run(["bash", self.hook.as_posix()], input=json.dumps(payload),
+                           capture_output=True, text=True, env=self.host_env(bin_dir))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return "".join(p.read_text(encoding="utf-8")
+                       for p in (self.root / ".agent-log").glob("*.md"))
+
+    def host_env(self, bin_dir):
+        # A host, not a cloud boundary: under the marker filetool-scope --log
+        # prints nothing by design, which would hide the defect.
+        env = {k: v for k, v in self.env.items()
+               if k not in ("CLAUDE_CODE_REMOTE", "HARNESS_BOUNDARY")}
+        env["PATH"] = str(bin_dir)
+        return env
+
+    def outside(self):
+        return Path(tempfile.gettempdir(), "zz-outside", "probe.txt").as_posix()
+
+    def shell_write(self):
+        return {"tool_name": "Bash", "tool_input": {"command": "echo x > %s" % self.outside()}}
+
+    def file_write(self):
+        return {"tool_name": "Edit", "tool_input": {
+            "file_path": self.outside(), "old_string": "a", "new_string": "b"}}
+
+    @unittest.skipIf(shutil.which("jq") is None, "jq not found")
+    def test_a_shell_write_logs_through_the_fast_path(self):
+        self.assertIn("shellwrite:", self.run_hook(self.shell_write()))
+
+    @unittest.skipIf(shutil.which("jq") is None, "jq not found")
+    def test_a_file_write_logs_through_the_fast_path(self):
+        self.assertIn("filewrite:", self.run_hook(self.file_write()))
+
+    @unittest.skipIf(shutil.which("jq") is None, "jq not found")
+    def test_the_fast_path_itself_answers_with_python3_only(self):
+        # The slow path gives the same line, so the line alone cannot show that
+        # fast() still reaches log-escape.py; FAST=1 can.
+        bin_dir = self.root / "py3only-bin"
+        bin_dir.mkdir()
+        for tool in ("bash", "tr", "sed", "jq"):
+            (bin_dir / tool).symlink_to(shutil.which(tool))
+        (bin_dir / "python3").symlink_to(sys.executable)
+        fast = self.root / ".claude" / "hooks" / "log-escape-fast.sh"
+        r = subprocess.run(
+            ["bash", "-c", 'ROOT="$2"; TOOL=Edit; FAST=""; . "$1"; '
+             'IFS= read -r -d "" INPUT; fast; echo "FAST=$FAST"',
+             "x", fast.as_posix(), self.root.as_posix()],
+            input=json.dumps(self.file_write()), capture_output=True, text=True,
+            env=self.host_env(bin_dir))
+        self.assertEqual(r.stdout.split()[-1:], ["FAST=1"], r.stdout + r.stderr)
+
+    @unittest.skipIf(shutil.which("jq") is None, "jq not found")
+    def test_a_shell_write_logs_through_shell_scope_log(self):
+        self.assertIn("shellwrite:", self.run_hook(self.shell_write(), fast=False))
+
+    @unittest.skipIf(shutil.which("jq") is None, "jq not found")
+    def test_a_file_write_logs_through_filetool_scope_log(self):
+        self.assertIn("filewrite:", self.run_hook(self.file_write(), fast=False))
+
+    @unittest.skipIf(shutil.which("jq") is None, "jq not found")
+    def test_no_python_at_all_still_never_blocks(self):
+        # These hooks log only: no Python means no scope line, never a block.
+        (self.root / "py3only-bin").mkdir()
+        bin_dir = self.root / "py3only-bin"
+        for tool in ("bash", "mkdir", "tr", "sed", "cat", "date", "jq"):
+            (bin_dir / tool).symlink_to(shutil.which(tool))
+        for payload in (self.shell_write(), self.file_write()):
+            with self.subTest(tool=payload["tool_name"]):
+                r = subprocess.run(["bash", self.hook.as_posix()], input=json.dumps(payload),
+                                   capture_output=True, text=True, env=self.host_env(bin_dir))
+                self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+
+# Bash syntax later than 3.2, which is macOS's /bin/bash: the printf clock
+# format silently disabled log-escape there (board 6177, item 1). Each entry is
+# (pattern, a line it must catch). Full-line comments are not scanned.
+_NAME = r"([A-Za-z_][A-Za-z0-9_]*|[0-9]+|[@*])"        # a parameter: name, positional, @ or *
+_DECL = r"\b(declare|typeset|local|readonly)(\s+-[a-zA-Z]+)*\s+-[a-zA-Z]*"
+LATER_THAN_BASH_3_2 = {
+    # name: (pattern, [every spelling it must catch]). Each spelling is self-tested
+    # and planted in a scratch hook (SE r1 F1: one example per row hid six misses).
+    "printf clock format, 4.2": (r"%\([^)]*\)T",
+        ["printf -v NOW '%(%T)T' -1", "printf '%(%F)T\\n' -1"]),
+    "associative array, 4.0": (_DECL + "A",
+        ["local -A seen", "declare -gA m", "typeset -r -A m", "readonly -A m"]),
+    "nameref, 4.3": (_DECL + "n",
+        ["local -n ref=x", "declare -rn ref=x"]),
+    "declare -g, 4.2": (_DECL + "g", ["declare -g G=1", "typeset -gx G"]),
+    "case-converting attribute -l/-u/-c, 4.0": (_DECL + "[luc]",
+        ["declare -l K", "local -u K", "typeset -x -l K"]),
+    "local -, 4.4": (r"\blocal\s+-(?=\s|$|;)", ["local -", "local - ; set -f"]),
+    "mapfile, readarray or coproc, 4.0": (r"\b(mapfile|readarray|coproc)\b",
+        ["mapfile -t L < f", "readarray L", "coproc cat"]),
+    "case modification, 4.0": (r"\$\{" + _NAME + r"(\[[^]]*\])?(,,?|\^\^?)",
+        ['x="${x,,}"', 'K="${1,,}"', 'K="${TOOL,,[A-Z]}"', 'K="${x^}"', 'K="${a[0]^^}"',
+         'K="${@,,}"']),
+    "parameter transformation, 4.4": (r"\$\{[^}]*@[QEPAaKkUuL]\}",
+        ['echo "${x@Q}"', 'echo "${a[@]@Q}"']),
+    "-v or -R test, 4.2/4.3": (r"(\[\[|\[|\btest)\s+(!\s+)?-[vR]\s",
+        ["[[ -v X ]] || exit", "[ -v X ] || true", "test -v X || true", "[[ ! -v X ]]",
+         "if [ -v X ]; then :; fi", "[[ -R ref ]]"]),
+    "EPOCHSECONDS, EPOCHREALTIME, BASHPID, SRANDOM or BASH_ARGV0":
+        (r"\b(EPOCHSECONDS|EPOCHREALTIME|BASHPID|SRANDOM|BASH_ARGV0)\b",
+         ["NOW=$EPOCHSECONDS", "echo ${BASHPID}"]),
+    "&>>, 4.0": (r"&>>", ["echo x &>> f", "echo x&>>f", 'OUT="$(cmd &>> f)"']),
+    "|&, 4.0": (r"\|&(?![]])", ["cmd |& tee f", "cmd|&tee f", 'LINE="$(cmd |& tr -d x)"']),
+    "case fall-through, 4.0": (r";;?&(?![&\]])",
+        ["a) x ;&", "a) x ;;&", "case $x in a) echo a;& b) echo b;; esac"]),
+    # The first colon must start an offset: `${x:-...}`, `:=`, `:+` and `:?` are
+    # 3.2 operators whose words may hold `:-` (SE r2 F3).
+    "negative substring length, 4.2": (r"\$\{" + _NAME + r"(\[[^]]*\])?:(?![-=+?])[^}:]*:\s*-",
+        ['echo "${x:0:-1}"', 'K="${CMD:0:-$n}"', 'K="${1:0:-1}"', 'K="${x: 1 : -2}"',
+         'K="${a[0]:1:-1}"']),
+    # Only `${name[-...` or an assignment `name[-...]=`: a bare `word[-...]` is a
+    # glob or regex bracket expression in 3.2 (SE r2 F3).
+    "negative array index, 4.3": (r"\$\{[#!]?[A-Za-z_][A-Za-z0-9_]*\[\s*-|"
+                                  r"(^|[\s;&|(])[A-Za-z_][A-Za-z0-9_]*\[\s*-[^]]*\]\+?=",
+        ['echo "${a[-1]}"', 'K="${a[-1]:-x}"', 'K="${a[ -1 ]}"', 'K="${a[-$n]}"',
+         "a[-1]=x", 'K="${#a[-1]}"', "local a[-1]=x"]),
+    "shopt option newer than 3.2": (
+        r"\bshopt\s+(-[a-z]+\s+)*([A-Za-z0-9_]+\s+)*(autocd|checkjobs|dirspell|globstar|lastpipe|"
+        r"direxpand|globasciiranges|inherit_errexit|localvar_inherit|localvar_unset|"
+        r"assoc_expand_once|progcomp_alias|complete_fullquote|patsub_replacement|"
+        r"varredir_close|noexpand_translation|globskipdots|compat3[2-9]|compat4[0-9])\b",
+        ["shopt -s lastpipe", "shopt -s inherit_errexit", "shopt -s nullglob globstar"]),
+    "wait -n/-f/-p, 4.3+": (r"\bwait\s+-[a-z]*[nfp]", ["wait -n", "wait -fn $p"]),
+    "{varname} redirection, 4.1": (r"(?<![$\w])\{[A-Za-z_][A-Za-z0-9_]*\}(<>|>>?|<|>&|<&)",
+        ["exec {fd}>/dev/null", "exec {fd}<f", "exec {fd}>&-"]),
+    "read -N or -i, 4.0/4.1": (r"\bread\s+(-[a-zA-Z]+\s+)*-[a-zA-Z]*[Ni]",
+        ["read -N 3 K", "read -r -N 1 K", "read -e -i x K"]),
+    "brace sequence step or zero padding, 4.0":
+        (r"\{-?[0-9a-zA-Z]+\.\.-?[0-9a-zA-Z]+\.\.|\{-?0[0-9]+\.\.",
+         ["for i in {1..10..2}; do :; done", "echo {01..10}"]),
+    # Only `case` opening the substitution: bash before 4.0 reads the first
+    # pattern's `)` as the end of `$(`. A `case` later inside `$( )` is not seen.
+    "case opening a command substitution": (r"\$\(\s*case\s",
+        ['K="$(case $TOOL in Bash) echo b;; esac)"']),
+}
+
+# Bash 3.2 forms near the patterns above that must stay unflagged.
+BASH_3_2_LOOKALIKES = [
+    'x="${x:-a}"', 'x="${x: -1}"', 'x="${a[${#a[@]}-1]}"', "RE='[^|;&]'",
+    "RE='(^|[^-[:alnum:]_])git'", 'local x=$(echo -n y)', "read -r -d '' INPUT",
+    "grep -v x f", 'printf "%s" "$x"', 'echo "${#a[@]}" "${!x}"', "x+=(y)",
+    '[ -n "$x" ]', "local LC_ALL=C", "echo {a,b}", "for i in {1..3}; do :; done",
+    'echo "${x/#a/b}"', "shopt -s nullglob", "wait $p", 'echo "${!pre@}"',
+    # SE r2 F3: valid 3.2 lines the round-2 table flagged.
+    "${A:-${B:-x}}", "${x:-a:-b}", "'foo[-_]bar'", "a[-_]*", '"a[-z]"', '"^v[-0-9]"',
+    "'s/$/;&/'", '"a?x=1;&y=2"', "shopt -q extglob && echo lastpipe",
+]
+
+# Rows matched against the line with quoted spans blanked: inside quotes `;&` is
+# sed or regex text (SE r2 F3). `|&` and `&>>` stay raw, since the blanker would
+# also hide them inside a double-quoted `$( )` (SE r3 F4).
+UNQUOTED_ROWS = {"case fall-through, 4.0"}
+
+
+def _unquoted(line):
+    return re.sub(r"'[^']*'|\"(\\.|[^\"\\])*\"", "''", line)
+
+
+def row_matches(name, line):
+    pat = LATER_THAN_BASH_3_2[name][0]
+    return re.search(pat, _unquoted(line) if name in UNQUOTED_ROWS else line) is not None
+
+
+def bash_3_2_scan(paths):
+    """Hits of LATER_THAN_BASH_3_2 in `paths`, one string per (line, row)."""
+    hits = []
+    for h in paths:
+        for n, line in enumerate(h.read_text(encoding="utf-8").splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            for name in LATER_THAN_BASH_3_2:
+                if row_matches(name, line):
+                    hits.append("%s:%d %s: %s" % (h.name, n, name, line.strip()[:80]))
+    return hits
+
+
+class HooksRunOnBash32(unittest.TestCase):
+    """Every shell hook keeps to bash 3.2 syntax.
+
+    No bash 3.2 runs here, so this is a scan, not an execution: it shows the
+    hooks need nothing a 3.2 shell lacks, from the list above. A construct the
+    list does not name is not caught.
+
+    The scan is frozen. It is a text matcher standing in for running this suite
+    under bash 3.2 (macOS /bin/bash first on PATH), so a gap found later is
+    recorded here as a residual, not patched (docs/adr/0001, parked text
+    matchers). Known residuals, each needing a parser or that bash 3.2 run:
+    a `case` later inside `$( )`; `read` options after an option that takes an
+    argument; any construct split across lines; a `;&` hidden by the quote
+    blanker (escaped quotes, quotes spanning lines), and
+    `;;&` or `;&` inside a double-quoted `$( )`; a negative index in arithmetic
+    (`$(( a[-1] ))`), in quoted `unset 'a[-1]'` or in unquoted `unset a[-1]`;
+    a quoted shopt name (`shopt -s "globstar"`); and one false hit, the valid
+    3.2 glob `[[ $k == key[-_]=* ]]`, which the assignment branch flags."""
+
+    def test_each_pattern_catches_every_listed_spelling(self):
+        for name, (pat, examples) in LATER_THAN_BASH_3_2.items():
+            for ex in examples:
+                with self.subTest(name=name, example=ex):
+                    self.assertTrue(row_matches(name, ex))
+
+    def test_bash_3_2_lookalikes_are_not_flagged(self):
+        for line in BASH_3_2_LOOKALIKES:
+            for name in LATER_THAN_BASH_3_2:
+                with self.subTest(line=line, name=name):
+                    self.assertFalse(row_matches(name, line))
+
+    def test_the_scan_reports_every_spelling_planted_in_a_hook(self):
+        d = Path(tempfile.mkdtemp(prefix="bash32-scan-"))
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        planted = [ex for _, examples in LATER_THAN_BASH_3_2.values() for ex in examples]
+        hook = d / "planted.sh"
+        hook.write_text("#!/bin/bash\n# a comment: [ -v X ] is not code\n"
+                        + "\n".join(planted) + "\n", encoding="utf-8")
+        flagged = {int(h.split(":")[1].split()[0]) for h in bash_3_2_scan([hook])}
+        missed = [ex for n, ex in enumerate(planted, 3) if n not in flagged]
+        self.assertEqual(missed, [])
+        self.assertNotIn(2, flagged)
+
+    def test_no_hook_uses_syntax_later_than_bash_3_2(self):
+        hooks = sorted((REPO / ".claude" / "hooks").rglob("*.sh"))
+        self.assertIn("log-escape.sh", [h.name for h in hooks])
+        self.assertEqual(bash_3_2_scan(hooks), [])
 
 
 def scope_rules():

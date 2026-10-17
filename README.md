@@ -14,7 +14,9 @@ remaining limits. No live app or CLI activation is claimed by the template.
 ## What you need
 
 - Claude Code or Codex (follow the matching setup guide).
-- Python 3, named `python3` or `python` (3.11+ for Codex).
+- Python 3.10+ for Claude Code or 3.11+ for Codex, named `python3` or `python`.
+  On a Mac, the built-in `python3` is often 3.9, which is too old. Use a newer
+  installed interpreter, or install a current Python from python.org.
 - Git and Bash; jq is additionally required for the Claude setup.
 - A GitHub account.
 
@@ -25,8 +27,11 @@ remaining limits. No live app or CLI activation is claimed by the template.
 2. Clone your copy, open it in Claude Code, and say: **read SETUP.md and set me up**.
 3. The agent walks you through the rest one step at a time, and stops whenever a step is
    yours to do.
+4. After setup, say **onboard me** at any time for a short tour of how deciding, building
+   and review work here.
 
-If Claude Code answers with `PREFLIGHT BLOCK`, a tool from the list above is missing.
+If Claude Code answers with `PREFLIGHT BLOCK`, a tool from the list above is missing or
+too old.
 Install it, then restart Claude Code.
 
 ## Status

@@ -1,0 +1,18 @@
+# DID swing 3: lane 6177, round-1 repairs (base ee0b7a9)
+- **SE F1** (`tests/test_log_escape.py`): each row of the bash>3.2 table now lists every spelling it must catch (65 in all). Three new tests:
+  - each spelling matches its row;
+  - 19 lookalikes that bash 3.2 accepts match no row;
+  - every spelling, planted in a scratch hook, is reported, and a comment line is not.
+- **Widened rows:** `-v`/`-R` under `[`, `[[` and `test`; case modification on positionals, `@` and pattern operands; a negative index followed by any operator; a negative length of `-$n`.
+- **SE residuals:** all added, as new rows (`{fd}>`, `declare -g`, `-l/-u/-c`, `local -`, `read -N/-i`, brace step or zero padding, `case` opening `$(`) or folded into widened ones (`inherit_errexit` and the other post-3.2 shopt names, `wait -f/-p`, `SRANDOM`, `BASH_ARGV0`). Left uncaught:
+  - a `case` later inside `$( )`: telling it from the word "case" inside quotes needs a parser;
+  - `read` options after an option that takes an argument;
+  - any construct split across lines.
+- **SE F1 replay:** I replayed all 18 of the grill's planted lines (its 5 CAUGHT and 13 MISSED) after `log-escape.sh:36`, through the new scan. All 18 are now CAUGHT, and the scan of today's hooks has zero hits.
+- **SE F2** (`tests/test_mutation_anchors.py`): the shim now parses options as getopt does. It refuses `i` in any short cluster and anywhere before `--`, and `--i*`, which covers `--in-place[=SUF]` and its abbreviations. `-e/-f/-l` consume their argument.
+- **New F2 checks:** `check_shim` refuses 13 in-place spellings with the file unchanged and lets 8 others reach sed (a refusal is known by the shim's own message). `check_planted_battery`: a battery copy with `sed -Ei` at the S1 line fails with `MISS  S1 trap in check.sh`.
+- **Red, old shim in a copy:** `FAIL (strict sed shim)` on -Ei, -ni, -si, -Ei.bak and --in-pl. With `check_shim` removed: `FAIL (planted battery): \`sed -Ei\` passed the POSIX-only run`.
+- **AR C1-C3:** SETUP.md :71, :176-178 and :180-181 carry each new text word for word, line breaks as given. Notes 1-15 are not applied.
+- `python3 tests/test_log_escape.py`: `Ran 40 tests ... OK (skipped=2)`. `python3 tests/test_mutation_anchors.py`: four PASS lines, rc 0.
+- `python3 scripts/run_tests.py`: `38 suites: 38 pass, 0 fail, 0 skip (9 tests skipped inside 4 passing suites)`.
+- **Unverified:** still no bash 3.2 or BSD sed here, so the scan and the GNU `--posix` shim stand in for both.

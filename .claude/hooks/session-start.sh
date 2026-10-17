@@ -35,6 +35,29 @@ if [ "${DIRTY:-0}" -gt 0 ]; then
   echo "session-start: $DIRTY dirty file(s) — another session may be working here. Never stage or commit files you did not create."
 fi
 
+# First-run nudge (ONBOARDING.md): one line when setup armed the push guard
+# (APPROVED_ORIGIN_URL no longer the OWNER/REPO placeholder), the tour has not
+# ended or been skipped (no .agent-log/onboarded, an ignored marker), and the
+# session is not cloud (unlock_consume.py cloud_boundary()'s two markers).
+# "Armed" is judged on the value sh would assign: the LAST unindented
+# assignment (the last one wins), quotes and any trailing comment stripped.
+# A missing hook file or URL line, an empty value, or the placeholder is not armed.
+URL="$(grep '^APPROVED_ORIGIN_URL=' "$ROOT/.githooks/pre-push" 2>/dev/null | tail -n 1 | tr -d '\r' || true)"
+URL="${URL#APPROVED_ORIGIN_URL=}"
+case "$URL" in
+  \"*) URL="${URL#\"}"; URL="${URL%%\"*}" ;;
+  \'*) URL="${URL#\'}"; URL="${URL%%\'*}" ;;
+  *) URL="${URL%%[[:space:]]*}" ;;
+esac
+case "$URL" in
+  ''|*OWNER/REPO*) ;;
+  *)
+    if [ ! -e "$ROOT/.agent-log/onboarded" ] && [ "${CLAUDE_CODE_REMOTE:-}" != "true" ] && [ "${HARNESS_BOUNDARY:-}" != "selfhost" ]; then
+      echo "session-start: Setup is complete. Say 'onboard me' for a short tour. (Agent: offer this to the person once; the tour is ONBOARDING.md.)"
+    fi
+    ;;
+esac
+
 LOG="$ROOT/.agent-log/$(date +%F).md"
 if [ -f "$LOG" ]; then
   echo "session-start: today's action-log tail (best-effort injection — doubt an authorization = read the full log):"

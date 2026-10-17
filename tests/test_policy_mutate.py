@@ -672,9 +672,13 @@ class TheMatchIsCaseCorrectOffWindows(_IsPolicyRoot, unittest.TestCase):
         `Scripts/` distinction genuinely survives.
         """
         self.assertTrue(self.policy("scripts/prepush_check.py"))
-        # Existence-gated, so True only where the filesystem folds.
-        self.assertEqual(self.policy("SCRIPTS/prepush_check.py"),
-                         sys.platform == "win32")
+        # Existence-gated, so True only where the filesystem folds. Whether it
+        # folds is measured on this class's own root, not read off the platform:
+        # macOS's APFS folds by default too (board 6177).
+        folds = (self.root / "SCRIPTS" / "prepush_check.py").exists()
+        self.assertEqual(self.policy("SCRIPTS/prepush_check.py"), folds)
+        if sys.platform == "win32":
+            self.assertTrue(folds, "Windows folds case; the probe itself is broken")
         for rel in (".CLAUDE/hooks/policy-mutate.py",
                     ".Claude/settings.json", ".GIT/config",
                     ".CLAUDE/keybindings.json", ".Claude/agents/x.md",

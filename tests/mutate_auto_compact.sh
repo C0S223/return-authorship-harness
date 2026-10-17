@@ -20,6 +20,11 @@ RC=0
 # 120s per-suite budget. The full battery is still the thing to run when the
 # suite or the guards move.
 ANCHORS_ONLY="${MUTATE_ANCHORS_ONLY:-}"
+# edit <sed script> <file>: an in-place edit without `sed -i`, whose syntax
+# differs between GNU sed and macOS's BSD sed (board 6177): `sed -i 'x' f` is GNU
+# only. Scripts below use POSIX sed only; test_mutation_anchors.py runs this
+# battery under a sed that refuses GNU extensions where it can.
+edit() { sed "$1" "$2" > "$2.new" && mv "$2.new" "$2"; }
 run() {
   local name="$1"; shift
   rm -rf "$M" && mkdir -p "$M" && cp "$SRC"/check.sh "$SRC"/resume.sh "$M"/
@@ -35,19 +40,19 @@ run() {
   fi
 }
 
-run "S1 trap in check.sh"   sed -i "/^trap 'exit 0' ERR$/d" "$M"/check.sh
-run "S1 trap in resume.sh"  sed -i "/^trap 'exit 0' ERR$/d" "$M"/resume.sh
-run "S2 full path frame"    sed -i 's@HANDOFF="\$REL/\$(basename@HANDOFF="$(basename@' "$M"/resume.sh
-run "S3 root validation"    sed -i 's@\[ -f "\$c/CLAUDE.md" \]@[ -n "$c" ]@' "$M"/resume.sh
-run "S4 re-arm clears both" sed -i "s@'del(.\[\$s\])'@'.[\$s] |= del(.nudged)'@" "$M"/check.sh
-run "S5 input_tokens term"  sed -i 's@\[.input_tokens, .cache_creation_input_tokens@[.cache_creation_input_tokens@' "$M"/check.sh
-run "S5 cache_read term"    sed -i 's@, .cache_read_input_tokens\]@]@' "$M"/check.sh
-run "S6 numeric coercion"   sed -i 's@| map(numbers) | add // 0@| (.[0] // 0) + (.[1] // 0) + (.[2] // 0)@' "$M"/check.sh
-run "S7 base-10 forcing"    sed -i 's@CEILING=\$(( 10#\$CEILING ))@CEILING=$(( CEILING ))@' "$M"/check.sh
-run "S8 sidechain filter"   sed -i 's@| select(.isSidechain != true)@@' "$M"/check.sh
-run "S10 runbook path"      sed -i 's@RUNBOOK="docs/auto-compact-runbook.md"@RUNBOOK="does/not/exist.md"@' "$M"/check.sh
-run "F7 source guard"       sed -i '/^\[ "\$SOURCE" = "compact" \] || exit 0$/d' "$M"/resume.sh
-run "delegate gate"         sed -i '/has("agent_id")/,+2d' "$M"/check.sh
-run "compact_boundary"      sed -i 's@/"subtype":"compact_boundary"/ { keep=""; next }@@' "$M"/check.sh
-run "clamp"                 sed -i 's@\[ "\$CEILING" -ge 100000 \] || CEILING=350000@:@' "$M"/check.sh
+run "S1 trap in check.sh"   edit "/^trap 'exit 0' ERR$/d" "$M"/check.sh
+run "S1 trap in resume.sh"  edit "/^trap 'exit 0' ERR$/d" "$M"/resume.sh
+run "S2 full path frame"    edit 's@HANDOFF="\$REL/\$(basename@HANDOFF="$(basename@' "$M"/resume.sh
+run "S3 root validation"    edit 's@\[ -f "\$c/CLAUDE.md" \]@[ -n "$c" ]@' "$M"/resume.sh
+run "S4 re-arm clears both" edit "s@'del(.\[\$s\])'@'.[\$s] |= del(.nudged)'@" "$M"/check.sh
+run "S5 input_tokens term"  edit 's@\[.input_tokens, .cache_creation_input_tokens@[.cache_creation_input_tokens@' "$M"/check.sh
+run "S5 cache_read term"    edit 's@, .cache_read_input_tokens\]@]@' "$M"/check.sh
+run "S6 numeric coercion"   edit 's@| map(numbers) | add // 0@| (.[0] // 0) + (.[1] // 0) + (.[2] // 0)@' "$M"/check.sh
+run "S7 base-10 forcing"    edit 's@CEILING=\$(( 10#\$CEILING ))@CEILING=$(( CEILING ))@' "$M"/check.sh
+run "S8 sidechain filter"   edit 's@| select(.isSidechain != true)@@' "$M"/check.sh
+run "S10 runbook path"      edit 's@RUNBOOK="docs/auto-compact-runbook.md"@RUNBOOK="does/not/exist.md"@' "$M"/check.sh
+run "F7 source guard"       edit '/^\[ "\$SOURCE" = "compact" \] || exit 0$/d' "$M"/resume.sh
+run "delegate gate"         edit '/has("agent_id")/{N;N;d;}' "$M"/check.sh
+run "compact_boundary"      edit 's@/"subtype":"compact_boundary"/ { keep=""; next }@@' "$M"/check.sh
+run "clamp"                 edit 's@\[ "\$CEILING" -ge 100000 \] || CEILING=350000@:@' "$M"/check.sh
 exit $RC

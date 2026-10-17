@@ -47,6 +47,31 @@ else:
     print("PY2RAN")
 """
 
+# A Python that reports VERSION (its first argument, e.g. "3.9") to the probe
+# and, run as a hook, prints "OLDRAN <VERSION>" instead. Apple's python3 is
+# 3.9.6, a real Python 3 the old major-only probe accepted, while the suite
+# needs 3.10 (board 6177, item 2).
+VERSION_HELPER = r"""
+import sys
+ver = tuple(int(x) for x in sys.argv[1].split("."))
+args = sys.argv[2:]
+if args[:1] == ["-c"]:
+    sys.version_info = ver + (0, "final", 0)
+    exec(args[1])
+else:
+    print("OLDRAN " + sys.argv[1])
+"""
+
+NO_PYTHON = "no Python 3.10 or newer found"
+
+
+def write_version_fake(tmp, path, version):
+    helper = tmp / "version_helper.py"
+    helper.write_text(VERSION_HELPER, encoding="utf-8")
+    path.write_text('#!/bin/sh\nexec "%s" "%s" %s "$@"\n' % (sys.executable, helper, version),
+                    encoding="utf-8")
+    path.chmod(0o755)
+
 
 @unittest.skipIf(BASH is None, "bash not found")
 class RunPython(unittest.TestCase):
@@ -121,7 +146,28 @@ class RunPython(unittest.TestCase):
         r = self.run_launcher(self.hook)
         self.assertEqual((r.returncode, r.stdout), (2, ""))
         self.assertNotIn("PY2RAN", r.stdout + r.stderr)
-        self.assertIn("no Python 3 found", r.stderr)
+        self.assertIn(NO_PYTHON, r.stderr)
+
+    def test_an_old_python3_is_skipped_for_a_newer_python(self):
+        # The Mac in board 6177: Apple's 3.9 as python3, a newer python.
+        write_version_fake(self.tmp, self.bin / "python3", "3.9")
+        write_version_fake(self.tmp, self.bin / "python", "3.14")
+        r = self.run_launcher(self.hook)
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "OLDRAN 3.14\n", ""))
+
+    def test_only_an_old_python3_blocks(self):
+        write_version_fake(self.tmp, self.bin / "python3", "3.9")
+        r = self.run_launcher(self.hook)
+        self.assertEqual((r.returncode, r.stdout), (2, ""))
+        self.assertNotIn("OLDRAN", r.stderr)
+        self.assertIn(NO_PYTHON, r.stderr)
+        self.assertEqual(len(r.stderr.strip().splitlines()), 1, r.stderr)
+
+    def test_3_10_itself_is_enough(self):
+        # The boundary: a `<=` probe would skip 3.10 and block.
+        write_version_fake(self.tmp, self.bin / "python3", "3.10")
+        r = self.run_launcher(self.hook)
+        self.assertEqual((r.returncode, r.stdout), (0, "OLDRAN 3.10\n"))
 
     def test_only_a_stub_blocks(self):
         self.fake("python3", "echo stub; exit 9009")
@@ -253,7 +299,7 @@ class Wiring(unittest.TestCase):
         _, c = self.cmd_for("git-guard.py")
         r = self.run_cmd(SHELLS[0], c, path=str(self.bin))
         self.assertEqual((r.returncode, r.stdout), (2, ""))
-        self.assertIn("no Python 3 found", r.stderr)
+        self.assertIn(NO_PYTHON, r.stderr)
 
     def test_a_hooks_own_exit_1_passes_through(self):
         (self.hooks / "git-guard.py").write_text("import sys; sys.exit(1)\n", encoding="utf-8")
@@ -294,7 +340,23 @@ class Wiring(unittest.TestCase):
         p.chmod(0o755)
         r = self.preflight(self.tool_path("bash", "jq"))
         self.assertEqual(r.returncode, 2, r.stderr)
-        self.assertIn("no Python 3 found", r.stderr)
+        self.assertIn(NO_PYTHON, r.stderr)
+
+    @unittest.skipIf(JQ is None, "jq not found")
+    def test_preflight_skips_an_old_python3_for_a_newer_python(self):
+        path = self.tool_path("bash", "jq")
+        write_version_fake(self.tmp, self.bin / "python3", "3.9")
+        write_version_fake(self.tmp, self.bin / "python", "3.14")
+        r = self.preflight(path)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    @unittest.skipIf(JQ is None, "jq not found")
+    def test_preflight_blocks_when_only_an_old_python3(self):
+        path = self.tool_path("bash", "jq")
+        write_version_fake(self.tmp, self.bin / "python3", "3.9")
+        r = self.preflight(path)
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn(NO_PYTHON, r.stderr)
 
     @unittest.skipIf(JQ is None, "jq not found")
     def test_preflight_checks_the_interpreter_of_an_unlaunched_row(self):
@@ -335,7 +397,7 @@ class Wiring(unittest.TestCase):
     def test_preflight_blocks_without_python(self):
         r = self.preflight(self.tool_path("bash", "jq"))
         self.assertEqual(r.returncode, 2)
-        self.assertIn("no Python 3 found", r.stderr)
+        self.assertIn(NO_PYTHON, r.stderr)
 
     def test_preflight_still_blocks_without_jq(self):
         r = self.preflight(self.tool_path("bash", "python3"))
