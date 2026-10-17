@@ -15,6 +15,11 @@ trap 'exit 0' ERR
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 
+# GIT_OK is set only when git runs in ROOT (not a non-git folder, git on PATH,
+# not refusing, e.g. dubious ownership). Without it the branch lines below say
+# nothing: an unusable git is not evidence that origin/HEAD is unset.
+GIT_OK=""
+git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1 && GIT_OK=1 || true
 BRANCH="$(git -C "$ROOT" branch --show-current 2>/dev/null || echo '?')"
 # `|| true`: outside a git work tree status fails, and under pipefail that would
 # trip the ERR trap here and end the hook before the nudge and the log tail.
@@ -30,9 +35,9 @@ DEFAULT=""
 case "$REF" in
   refs/remotes/origin/?*) git -C "$ROOT" rev-parse -q --verify "$REF^{commit}" >/dev/null 2>&1 && DEFAULT="${REF#refs/remotes/origin/}" || true ;;
 esac
-[ -z "$DEFAULT" ] && echo "session-start: this checkout is on '$BRANCH'; origin's default branch is unknown (refs/remotes/origin/HEAD unset or dangling), so the gates refuse pushes. The human runs: git remote set-head origin --auto"
-[ -n "$DEFAULT" ] && [ "$BRANCH" != "$DEFAULT" ] && echo "session-start: this checkout is on '$BRANCH', not the default branch '$DEFAULT'."
-[ -n "$DEFAULT" ] && [ "$BRANCH" = "$DEFAULT" ] && echo "session-start: this checkout is on the default branch '$DEFAULT'. §3 — in a shared tree on the default branch, a commit IS a push for gating purposes. Isolate before shared-file work: git worktree add --no-track worktrees/<n> -b <branch> origin/$DEFAULT. Advisory only; nothing enforces this."
+[ -n "$GIT_OK" ] && [ -z "$DEFAULT" ] && echo "session-start: this checkout is on '$BRANCH'; origin's default branch is unknown (refs/remotes/origin/HEAD unset or dangling), so the gates refuse pushes. The human runs: git remote set-head origin --auto"
+[ -n "$GIT_OK" ] && [ -n "$DEFAULT" ] && [ "$BRANCH" != "$DEFAULT" ] && echo "session-start: this checkout is on '$BRANCH', not the default branch '$DEFAULT'."
+[ -n "$GIT_OK" ] && [ -n "$DEFAULT" ] && [ "$BRANCH" = "$DEFAULT" ] && echo "session-start: this checkout is on the default branch '$DEFAULT'. §3 — in a shared tree on the default branch, a commit IS a push for gating purposes. Isolate before shared-file work: git worktree add --no-track worktrees/<n> -b <branch> origin/$DEFAULT. Advisory only; nothing enforces this."
 if [ "${DIRTY:-0}" -gt 0 ]; then
   echo "session-start: $DIRTY dirty file(s) — another session may be working here. Never stage or commit files you did not create."
 fi
@@ -43,10 +48,11 @@ fi
 # cloud_boundary()'s two markers). The marker is .agent-log/onboarded (ignored by
 # Git), shared by every worktree: it counts in MAIN, the main checkout, or in ROOT
 # (an older per-checkout marker still counts). MAIN is the parent of the absolute
-# `git rev-parse --git-common-dir` when that folder is named .git; for a bare or
-# separate git dir, or when git fails, MAIN is ROOT. Each git call ends in
-# `|| true`, so a git failure cannot trip the ERR trap and drop the log tail.
-# No --path-format (git 2.31): the path is made absolute with cd and pwd.
+# `git rev-parse --git-common-dir` when that folder is named .git (so a bare or
+# separate git dir at proj/.git gives proj); otherwise MAIN is ROOT, and ROOT also
+# when git fails. Each git call ends in `|| true`, so a git failure cannot trip
+# the ERR trap and drop the log tail. No --path-format (git 2.31): the path,
+# which git may print relative to ROOT, is made absolute with cd ROOT, cd, pwd.
 # "Armed" is judged on the value sh would assign: the LAST unindented
 # assignment (the last one wins), quotes and any trailing comment stripped.
 # A missing hook file or URL line, an empty value, or the placeholder is not armed.

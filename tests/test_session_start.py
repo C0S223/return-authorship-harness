@@ -280,6 +280,119 @@ class SessionStartSharedMarker(unittest.TestCase):
         self.mark(self.tmp)
         self.assertEqual(len(self.nudges(root)), 1)
 
+    def test_relative_common_dir_from_a_subfolder_resolves_against_root(self):
+        # SE r1 R1: from a subfolder of a main checkout git answers `../.git`,
+        # relative to ROOT, not to the hook's cwd. Run from a cwd outside the
+        # repo so a resolution against cwd (or none) misses the marker.
+        main = self.tmp / "main"
+        sub = main / "sub"
+        sub.mkdir(parents=True)
+        self.git(main, "init", "-q", "-b", "main")
+        self.armed(sub)
+        self.mark(main)
+        gcd = subprocess.run(["git", "-C", str(sub), "rev-parse", "--git-common-dir"],
+                             check=True, capture_output=True, text=True).stdout.strip()
+        if os.path.isabs(gcd):
+            self.skipTest("this git prints an absolute common dir (%s); the relative "
+                          "branch is unreachable here" % gcd)
+        elsewhere = self.tmp / "elsewhere" / "deep"
+        elsewhere.mkdir(parents=True)
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(sub))
+        env.pop("CLAUDE_CODE_REMOTE", None)
+        env.pop("HARNESS_BOUNDARY", None)
+        r = subprocess.run(["bash", str(HOOK)], capture_output=True, text=True, env=env,
+                           cwd=str(elsewhere))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual([l for l in r.stdout.splitlines() if NUDGE in l], [], r.stdout)
+
+
+ORIGIN_CLAIMS = ("unset or dangling", "git remote set-head")
+# The commands session-start.sh runs besides git and shell builtins.
+HOOK_TOOLS = ("wc", "tr", "grep", "tail", "date", "dirname")
+
+
+@unittest.skipUnless(shutil.which("bash") and shutil.which("git"), "needs bash and git")
+class SessionStartNoOriginClaimWithoutGit(unittest.TestCase):
+    """SE r1 F1: when git cannot run in ROOT the hook says nothing about
+    origin/HEAD (an unusable git is not an unset origin/HEAD), and the log tail
+    still prints. With working git and origin/HEAD unset the line still prints
+    (SessionStartBranchLine.test_unknown_default_says_so)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="session-start-nogit-"))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.today = subprocess.run(["date", "+%F"], capture_output=True, text=True,
+                                    check=True).stdout.strip()
+
+    def git(self, cwd, *a):
+        subprocess.run(["git", "-C", str(cwd), "-c", "user.email=t@t", "-c", "user.name=t", *a],
+                       check=True, capture_output=True)
+
+    def log(self, root):
+        (Path(root) / ".agent-log").mkdir(exist_ok=True)
+        (Path(root) / ".agent-log" / (self.today + ".md")).write_text("LOGLINE-Z\n",
+                                                                     encoding="utf-8")
+
+    def bin_dir(self, git_target=None):
+        """A PATH holding only the hook's tools, as symlinks; `git` links to
+        git_target when given (a git that fails), else there is no git."""
+        d = self.tmp / ("bin-" + (Path(git_target).name if git_target else "nogit"))
+        d.mkdir()
+        try:
+            for tool in HOOK_TOOLS:
+                real = shutil.which(tool)
+                if not real:
+                    self.skipTest("cannot build a git-free PATH: no %s" % tool)
+                os.symlink(real, str(d / tool))
+            if git_target:
+                os.symlink(git_target, str(d / "git"))
+        except OSError as e:
+            self.skipTest("cannot build a git-free PATH: symlink failed: %s" % e)
+        if not git_target:
+            self.assertIsNone(shutil.which("git", path=str(d)))
+        return str(d)
+
+    def run_hook(self, root, path=None):
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(root))
+        if path is not None:
+            env["PATH"] = path
+        r = subprocess.run([shutil.which("bash"), str(HOOK)], capture_output=True,
+                           text=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout
+
+    def assert_no_origin_claim_and_tail(self, out):
+        for line in out.splitlines():
+            for claim in ORIGIN_CLAIMS:
+                self.assertNotIn(claim, line, out)
+        self.assertIn("LOGLINE-Z", out)
+
+    def test_plain_non_git_folder(self):
+        root = self.tmp / "plain"
+        root.mkdir()
+        self.log(root)
+        self.assert_no_origin_claim_and_tail(self.run_hook(root))
+
+    def test_linked_worktree_with_origin_head_set_and_git_unusable(self):
+        main = self.tmp / "main"
+        main.mkdir()
+        self.git(main, "init", "-q", "-b", "main")
+        self.git(main, "commit", "-q", "--allow-empty", "-m", "c1")
+        self.git(main, "update-ref", "refs/remotes/origin/main", "HEAD")
+        self.git(main, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+        linked = self.tmp / "linked"
+        self.git(main, "worktree", "add", "-q", str(linked), "-b", "lane-x")
+        self.log(linked)
+        # Control: with git working, origin/HEAD is read as set.
+        out = self.run_hook(linked)
+        self.assertIn("on 'lane-x', not the default branch 'main'", out)
+        variants = [("git absent from PATH", None)]
+        if shutil.which("false"):
+            variants.append(("git that always fails", shutil.which("false")))
+        for name, target in variants:
+            with self.subTest(name):
+                self.assert_no_origin_claim_and_tail(self.run_hook(linked, self.bin_dir(target)))
+
 
 if __name__ == "__main__":
     unittest.main()
