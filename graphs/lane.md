@@ -83,7 +83,8 @@ Search prior rulings and existing mechanisms before commissioning a new one, and
 and misses in one line. Recalled rules are never authorization.
 
 **Model routing: the cascade.** Four tiers, one row per agent tool; another tool adds its
-own row later. Where a tier's model is unavailable, use the next tier up.
+own row later. Where a tier's model is unavailable, use the next tier up; with none above
+available, use the highest available tier below it and say so in the reason.
 
 | Tool | light | mid | heavy | top |
 |---|---|---|---|---|
@@ -97,16 +98,17 @@ own row later. Where a tier's model is unavailable, use the next tier up.
 - **Escalation:** a swing that fails review moves the next swing's builder up one tier; the
   hub may raise it further with a stated reason, and never lowers it within the lane.
 - **Top tier:** any dispatch on top needs the operator's yes first; declined, it runs on
-  heavy and its reason starts `top declined` (both hub-authored defaults, for cost). A
-  model the operator names for a dispatch wins over the cascade.
+  heavy (or the highest available tier below top) and its reason starts `top declined`
+  (both hub-authored defaults, for cost). A model the operator names for a dispatch wins
+  over the cascade.
 
 Every builder and reviewer dispatch line states
 `builder=<tier/model> reviewer=<tier/model> reason=<one line>`; a line missing a value is a
-breach. At landing, the PR body or a desk report records the time bucket, the swings taken
-and each one's tiers; that record, bucket included, is the data a later classifier will be
-tuned on. A follow-up whose fix the review states line by line (an exact repair) and that
-touches only copy, cites or markup, with no logic change, the hub pastes inline; it never
-resumes a builder for it.
+breach. At landing, the PR body records the time bucket, the swings taken and each one's
+tiers; that record, bucket included, is the data a later classifier will be tuned on. A
+follow-up whose fix the review states line by line (an exact repair) and that touches only
+copy, cites or markup, with no logic change, the hub pastes inline; it never resumes a
+builder for it.
 
 State "round N of M" (M is 1 for prose; 2 for code, the second only on a C1 or C2 finding)
 and the expected duration; the duration is a check-by for the hub, not a bound. Record the

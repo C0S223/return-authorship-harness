@@ -23,8 +23,10 @@ https://openai.com/es-ES/index/introducing-swe-bench-verified/
   GPT-4.1 reached 83% on Aider Polyglot at lower cost (a secondary report).
 - Claude Code's `opusplan`: Opus plans, Sonnet executes.
 - Anthropic's multi-agent research system: an Opus lead with Sonnet subagents beat a single
-  Opus agent by 90.2% on its internal eval, at about 15x the tokens. The main lever was
-  delegation quality: detailed, unambiguous task descriptions for each subagent.
+  Opus 4 agent by 90.2% on its internal research eval. Multi-agent runs used about 15x the
+  tokens of a chat (a single agent, about 4x), and token use by itself explained 80% of the
+  performance variance. The post also says each subagent needs an objective, an output
+  format, guidance on the tools and sources to use, and clear task boundaries.
 - Official Claude Code docs: route lower-cost work, such as exploration, to Haiku. The
   per-invocation `model` parameter overrides the definition.
 
@@ -78,4 +80,4 @@ Sources: https://arxiv.org/html/2512.24661v1 · https://www.alphaxiv.org/abs/260
 - The principled future classifier: an IRT-style fit on our own lane outcomes. Each lane is
   an item, each tier an ability, and swings-to-land is the response. It needs the receipts
   that the cascade now records.
-- Work-order quality, meaning delegation clarity, is the biggest lever. That is the
+- Work-order quality, meaning delegation clarity, is a lever the harness controls directly.

@@ -1,0 +1,15 @@
+# DID swing 5: lane 6178, SE r1 and AR r1 repairs (base e167766)
+- **SE F1, session-start.sh:** "armed" now comes from the value sh would assign. The hook takes the last unindented `APPROVED_ORIGIN_URL=` line (`tail -n 1`), drops CR, then reads the value: a double- or single-quoted value is cut at its closing quote; an unquoted one is cut at the first blank, which drops a trailing comment. An empty value, or one holding `OWNER/REPO`, is not armed.
+- **New tests (15 in total):**
+  - from F1: an empty value gives no line; the placeholder followed by an armed line gives exactly one;
+  - from R1: `CLAUDE_CODE_REMOTE` set to `1` or `false`, and `HARNESS_BOUNDARY=managed`, each give one line;
+  - from R3: a marker that is a directory gives no line;
+  - from R2: the output order is branch, dirty, nudge, log header, log line, with rc 0;
+  - extra: a trailing `# was OWNER/REPO` comment after a double-quoted, single-quoted or unquoted real URL gives one line.
+- **Red:** against 1b1b159's hook, the empty-value, placeholder-then-armed and trailing-comment tests fail (`failures=5`). On the new hook these mutants each fail at least one test: M7, M8, M9, M11, M12, no `tail`, no empty arm, no comment strip, no double-quote cut, no single-quote cut, and the old M1, M3, M4, M5. Probes: a CRLF real URL gives 1 nudge; a CRLF placeholder gives 0.
+- **AR C2-C5:** applied word for word, reflowed to the line width: research :81-82, lane.md :86 and :99-100, lane.md :105-106, ONBOARDING.md :74-75.
+- **AR C1:** the AR text was used, with the figures the hub checked: "Opus 4", "internal research eval", "15x ... of a chat", "4x", "80% of the performance variance", and the subagent list quoted from the post.
+- A grep of the tree for the removed private phrase: 0 matches. Earlier history held it; the hub rewrote that unpushed history. No polish was applied.
+- **Near-miss:** a built-in safety check refused an `rm -rf` of a variable scratch path, and the command did not run. Nothing was removed. Later runs used fresh `mktemp -d` dirs under the scratchpad.
+- `python3 tests/test_session_start.py`: `OK`. `python3 tests/test_log_escape.py`: `OK (skipped=2)`.
+- `python3 scripts/run_tests.py`: `38 suites: 38 pass, 0 fail, 0 skip (9 tests skipped inside 4 passing suites)`.

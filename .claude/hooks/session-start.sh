@@ -39,9 +39,17 @@ fi
 # (APPROVED_ORIGIN_URL no longer the OWNER/REPO placeholder), the tour has not
 # ended or been skipped (no .agent-log/onboarded, an ignored marker), and the
 # session is not cloud (unlock_consume.py cloud_boundary()'s two markers).
-# A missing hook file or URL line is not armed.
-URL_LINE="$(grep '^APPROVED_ORIGIN_URL=' "$ROOT/.githooks/pre-push" 2>/dev/null || true)"
-case "$URL_LINE" in
+# "Armed" is judged on the value sh would assign: the LAST unindented
+# assignment (the last one wins), quotes and any trailing comment stripped.
+# A missing hook file or URL line, an empty value, or the placeholder is not armed.
+URL="$(grep '^APPROVED_ORIGIN_URL=' "$ROOT/.githooks/pre-push" 2>/dev/null | tail -n 1 | tr -d '\r' || true)"
+URL="${URL#APPROVED_ORIGIN_URL=}"
+case "$URL" in
+  \"*) URL="${URL#\"}"; URL="${URL%%\"*}" ;;
+  \'*) URL="${URL#\'}"; URL="${URL%%\'*}" ;;
+  *) URL="${URL%%[[:space:]]*}" ;;
+esac
+case "$URL" in
   ''|*OWNER/REPO*) ;;
   *)
     if [ ! -e "$ROOT/.agent-log/onboarded" ] && [ "${CLAUDE_CODE_REMOTE:-}" != "true" ] && [ "${HARNESS_BOUNDARY:-}" != "selfhost" ]; then

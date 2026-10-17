@@ -71,7 +71,7 @@ Ask: "Shall I say a word about which AI models do the work?"
 
 Explain: the session they are talking to now is the **hub**. It runs the grill and the lane
 and hands work to helper agents. Run it on a mid-range, reasonably strong model at medium
-effort, one good at coordinating work. They do not pick the helpers' models: the lane does,
+effort, one good at coordinating work. They need not pick the helpers' models (a model they name for a job wins): the lane does,
 starting builders on the lightest model that fits, running each reviewer one level above its
 builder, and moving up a level when a review fails. The strongest level waits for their yes
 (`graphs/lane.md`, Model routing).
