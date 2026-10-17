@@ -44,8 +44,9 @@ Ask: "Any questions, or shall I show you how building works?"
 
 Explain: when they approve a build, the agent makes a separate copy of the repository on a
 branch named `lane-<number>` and writes a one-screen **work order** under
-`work/<number>-<name>/`: the goal, the check that decides it is done, and the only files
-that may change. A **builder** agent (`super-doer`) does the work and commits just those
+`work/<number>-<name>/`: the goal, the check that decides it is done, the only files
+that may change, and a guess at how long a person would take, which helps pick the model.
+A **builder** agent (`super-doer`) does the work and commits just those
 files. Then a different agent reviews it, **by kind**: code goes to `senior-engineer`, which
 runs the tests; writing that an agent will read later, or that goes public, goes to
 `adversarial-reviewer`. Each saves its review under `grills/`; an approving review is a

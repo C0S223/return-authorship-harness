@@ -73,6 +73,8 @@ Write **`WORK-ORDER.md`** into `work/<id>-<slug>/`, **one screen at most (40 lin
   done, which the builder may see (for a test gap, the check is that the suite fails each
   mutant the code reviewer plants);
 - the files the builder may edit, everything else frozen;
+- **estimated human time**, one bucket: `<15 min`, `15 min-1 h`, `1-4 h`, `>4 h` (the
+  SWE-bench Verified buckets); human estimates run optimistic, so round up when unsure;
 - the suites the change owes, its **blast radius**: every suite whose subject the diff
   touches;
 - the reviewer for each kind the fence names, planned now (§ Review is by kind).
@@ -88,20 +90,23 @@ own row later. Where a tier's model is unavailable, use the next tier up.
 | Claude Code | haiku | sonnet | opus | fable |
 
 - **Builder:** the hub picks each swing's starting tier and leans light, the lowest tier
-  that fits the work, with the reason in one line on the dispatch.
+  that fits the work, with the reason in one line on the dispatch, citing the work order's
+  time bucket.
 - **Reviewer:** one tier above that swing's builder, never below mid (Haiku writes, Sonnet
   or above checks); a top-tier builder's reviewer stays on top.
 - **Escalation:** a swing that fails review moves the next swing's builder up one tier; the
   hub may raise it further with a stated reason, and never lowers it within the lane.
-- **Top tier:** any dispatch on top needs the operator's yes first (a hub-authored default,
-  for cost). A model the operator names for a dispatch wins over the cascade.
+- **Top tier:** any dispatch on top needs the operator's yes first; declined, it runs on
+  heavy and its reason starts `top declined` (both hub-authored defaults, for cost). A
+  model the operator names for a dispatch wins over the cascade.
 
 Every builder and reviewer dispatch line states
 `builder=<tier/model> reviewer=<tier/model> reason=<one line>`; a line missing a value is a
-breach. At landing, the PR body or a desk report records the swings taken and each one's
-tiers: the data a later classifier will be tuned on. A follow-up whose fix the review states
-line by line (an exact repair) and that touches only copy, cites or markup, with no logic
-change, the hub pastes inline; it never resumes a builder for it.
+breach. At landing, the PR body or a desk report records the time bucket, the swings taken
+and each one's tiers; that record, bucket included, is the data a later classifier will be
+tuned on. A follow-up whose fix the review states line by line (an exact repair) and that
+touches only copy, cites or markup, with no logic change, the hub pastes inline; it never
+resumes a builder for it.
 
 State "round N of M" (M is 1 for prose; 2 for code, the second only on a C1 or C2 finding)
 and the expected duration; the duration is a check-by for the hub, not a bound. Record the
