@@ -12,12 +12,17 @@ cloud or a self-hosted runner). A cloud session never shows that line, but **onb
 **Ending or skipping.** At the end of step 7, or as soon as they say **skip** at any point,
 create the empty file `.agent-log/onboarded` (and the folder, if it is missing) at the root
 of the **main checkout**: the folder that holds the `.git` folder named by
-`git rev-parse --git-common-dir`, or, if there is no such folder, the current checkout's
-root. Create it there even when you are working in a lane worktree. Tell them plainly: one
-marker covers the main checkout and every lane worktree, so the offer does not come back in
-each new worktree; it only stops the offer at the start of new sessions; it lives in a
-folder Git ignores, so nothing is committed; a fresh clone has no marker and may offer the
-tour once more; and saying **onboard me** still starts the tour.
+`git rev-parse --git-common-dir` (run it at the current checkout's root; a relative answer
+is relative to that root), or, if git fails or names no `.git` folder, the current
+checkout's root. If that folder is not the current checkout's root (you are in a lane
+worktree), writing there is a write outside this checkout (`CLAUDE.md` §2): first ask them
+one yes/no question naming the exact path; on yes, create it there; on no, create it at the
+current checkout's root and tell them the offer may come back in other worktrees. Tell them
+plainly: a marker in the main checkout covers it and every lane worktree, so the offer does
+not come back in each new worktree; it only stops the offer at the start of new sessions; it
+lives in a folder Git ignores, so nothing is committed; a fresh clone has no marker and
+offers the tour again at each new session until it is ended or skipped there; and saying
+**onboard me** still starts the tour.
 
 **How to run it.** One step per turn, one idea per message, in plain words. End each step
 with a plain question and wait for the reply. Put each step's text in your last message,
