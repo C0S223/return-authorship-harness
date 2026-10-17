@@ -104,6 +104,22 @@ native roster roles and an independent non-author review. Repository-only tracki
 uses the original no-board exceptions: the work order and handoff retain the skipped
 connector writes. A missing connected board is unknown, never empty.
 
+For lane dispatches, the hub uses the Codex model/effort pairs in `graphs/lane.md`,
+checks both against the current tool's advertised options, and supplies explicit
+`model` and `reasoning_effort` overrides. With the native `spawn_agent` tool that
+exposes `fork_turns`, overrides require `fork_turns="none"`: a full-history fork
+inherits the parent model and effort and cannot implement the selected pair.
+Supply the governing instructions, work order, pinned revision and required input
+paths explicitly in the fresh agent's task. Keep the roster `agent_type` and all
+existing dispatch approvals. If the tool cannot select both values, report the
+capability gap before dispatch; a prompt instruction cannot set runtime effort.
+The hub records the selected model and effort in the graph's dispatch receipt and
+landing record. This mapping selects delegated agents; it does not change the
+running parent session's model or effort. The CLI's session-level setting is
+`model_reasoning_effort`; use the spelling the actual tool exposes.
+The Haiku-specific wording in `roles/scribe.md` describes Claude Code; a native
+Codex scribe uses the graph's Codex light model/effort pair.
+
 `$review-order` runs `scripts/codex_review_order.py`, which reuses the original Git,
 citation and author-check machinery while reporting the actual Codex binding. It
 refuses dirty or unpinned review work. Reviewers preserve the existing stamp format,

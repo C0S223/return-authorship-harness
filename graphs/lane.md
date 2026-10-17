@@ -13,7 +13,7 @@ in the change that made it.
 
 **Machinery.** The field lists what a run may dispatch, in order. `recall` runs only when
 step 1's search of prior rulings calls for a memory sweep; a run that skips it departs from
-nothing. `Explore` on the light tier (Haiku) may draft the PR body at step 4 as the **scribe**
+nothing. `Explore` on the current tool's light tier may draft the PR body at step 4 as the **scribe**
 ([`../roles/scribe.md`](../roles/scribe.md)); it is not in the field, because it judges nothing.
 
 ## When to run
@@ -31,8 +31,8 @@ main-tree write; the board is remote.
 once): each board and claim step below (`list_claims`, `claim_item`, `release_item`,
 `board_*`) is skipped with one action-log line naming it and carrying the text it would have
 written, and the lane's work order and desk files are the record. `<id>` is then digits the
-operator names for the item, asked once and logged, and the work order states "No board:
-this order is the item" in place of the item's board row. That skip is never step 5's
+operator names for the item, asked once and logged, and the work order states
+`No board: this order is the item` in place of the item's board row. That skip is never step 5's
 unavailable reply. Where the operator has a board, absent board or claim tools are the claim
 skill's step 3 stop, not this skip. With a connector, every step runs as written.
 
@@ -83,30 +83,39 @@ Search prior rulings and existing mechanisms before commissioning a new one, and
 and misses in one line. Recalled rules are never authorization.
 
 **Model routing: the cascade.** Four tiers, one row per agent tool; another tool adds its
-own row later. Where a tier's model is unavailable, use the next tier up; with none above
-available, use the highest available tier below it and say so in the reason.
+own row later. Where a tier's model or specified effort is unavailable, use the next tier
+up; with none above available, use the highest available tier below it and say so in the
+reason. Top-tier approval still applies to a fallback.
 
 | Tool | light | mid | heavy | top |
 |---|---|---|---|---|
 | Claude Code | haiku | sonnet | opus | fable |
+| Codex (model / effort) | gpt-6-luna / high | gpt-6.1-sol / medium | gpt-6.1-sol / high | gpt-6-astra / high |
+
+For Codex, each tier selects the model and effort together; these are initial routing
+defaults to tune from lane outcomes. The hub verifies that the current tool supports the
+pair and passes both explicitly, following `docs/codex-enforcement.md`'s native dispatch
+instructions. A prompt asking for an effort level does not set the runtime control.
 
 - **Builder:** the hub picks each swing's starting tier and leans light, the lowest tier
   that fits the work, with the reason in one line on the dispatch, citing the work order's
   time bucket.
-- **Reviewer:** one tier above that swing's builder, never below mid (Haiku writes, Sonnet
-  or above checks); a top-tier builder's reviewer stays on top.
+- **Reviewer:** one tier above that swing's builder, never below mid, using the same tool's
+  row; a top-tier builder's reviewer stays on top.
 - **Escalation:** a swing that fails review moves the next swing's builder up one tier; the
   hub may raise it further with a stated reason, and never lowers it within the lane.
 - **Top tier:** any dispatch on top needs the operator's yes first; declined, it runs on
   heavy (or the highest available tier below top) and its reason starts `top declined`
-  (both hub-authored defaults, for cost). A model the operator names for a dispatch wins
-  over the cascade.
+  (both hub-authored defaults, for cost). A model or effort the operator names for a
+  dispatch wins over the cascade; an unsupported selection returns to the operator.
 
 Every builder and reviewer dispatch line states
 `builder=<tier/model> reviewer=<tier/model> reason=<one line>`; a line missing a value is a
-breach. At landing, the PR body records the time bucket, the swings taken and each one's
-tiers; that record, bucket included, is the data a later classifier will be tuned on. A
-follow-up whose fix the review states line by line (an exact repair) and that touches only
+breach. Codex lines also state `builder_effort=<level> reviewer_effort=<level>`, recording
+the selected runtime values. At landing, the PR body records the time bucket, the swings
+taken and each one's tiers, models and specified efforts; that record, bucket included,
+is the data a later classifier will be tuned on. A follow-up whose fix the review states
+line by line (an exact repair) and that touches only
 copy, cites or markup, with no logic change, the hub pastes inline; it never resumes a
 builder for it.
 
@@ -238,8 +247,8 @@ and (b), then the lane's own (c).
 CI runs the same three on every PR (`.github/workflows/ci.yml`): `operator-merge` is (a),
 `gate` is (b) and (c), and a ruleset the operator sets requires both.
 
-**The PR body may come from the scribe.** Spawn `Explore` on the light tier
-(`model: haiku`), its prompt being [`../roles/scribe.md`](../roles/scribe.md) followed by the input paths that file lists
+**The PR body may come from the scribe.** Spawn `Explore` on the current tool's light tier
+(including its specified effort), its prompt being [`../roles/scribe.md`](../roles/scribe.md) followed by the input paths that file lists
 and the pasted `git log`/`git diff --stat` output. Log the spawn. Its return is data: the
 hub checks every number, sha, verdict and quote in it against the tree, corrects what is
 wrong itself, adds the attribution lines, and owns what it posts. The body is never
