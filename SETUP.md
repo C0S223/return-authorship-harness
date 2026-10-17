@@ -22,12 +22,12 @@ tool call.
 
 Run `python3 --version`, then `python --version`, then `git --version` and `jq --version`.
 
-- **Python 3.10 or newer** is needed under one of the two names. The safety checks start
-  through `.claude/hooks/run-python.sh`, which tries `python3`, then `python`, and uses the
-  first that is 3.10 or newer. If neither is, every safety check refuses to start, so every
-  prompt is blocked; the test suite (step 4) needs 3.10 as well. On a Mac, `python3` is
-  often Apple's 3.9: that is fine when `python` reports 3.10 or newer. Note which name does,
-  and use it wherever a step below says `python3`.
+- **Python 3.11 or newer** is needed to complete setup and run the full repository suite,
+  which includes the Codex tests. The Claude hook launcher, `.claude/hooks/run-python.sh`,
+  separately accepts Python 3.10 or newer, trying `python3` before `python`. For the
+  commands in this guide, choose an installed interpreter that reports 3.11 or newer
+  and use its name wherever a step says `python3`. An older interpreter that can run
+  the Claude hooks is not sufficient for step 4.
 - Git and jq are needed too. The check that runs before every prompt
   (`.claude/hooks/preflight.sh`) refuses all prompts without jq.
 - Bash needs no version check: the shell hooks keep to the bash 3.2 that macOS ships

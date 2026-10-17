@@ -14,9 +14,10 @@ remaining limits. No live app or CLI activation is claimed by the template.
 ## What you need
 
 - Claude Code or Codex (follow the matching setup guide).
-- Python 3.10+ for Claude Code or 3.11+ for Codex, named `python3` or `python`.
-  On a Mac, the built-in `python3` is often 3.9, which is too old. Use a newer
-  installed interpreter, or install a current Python from python.org.
+- Python 3.11+ for setup, the full repository test suite, and Codex, named `python3`
+  or `python`. Claude hooks alone support Python 3.10+. On a Mac, the built-in
+  `python3` may be older; use a supported installed interpreter or install a current
+  Python from python.org.
 - Git and Bash; jq is additionally required for the Claude setup.
 - A GitHub account.
 
