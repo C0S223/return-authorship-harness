@@ -4,8 +4,9 @@
 - [x] WORK-ORDER.md written
 - [x] super-doer build (builder=mid/sonnet), candidate dc04f2b
 - [x] hub verify: 3 red on base, 25 green, 38/38
-- [ ] senior-engineer r1 (heavy/opus); adversarial-reviewer r1 (heavy/opus)
-- [ ] preflight (a) ci_policy_check (b) stamp_check (c) run_tests
-- [ ] scrub; push lane-6180; draft PR via gh api
+- [x] senior-engineer r1: BLOCK, F1 (C3): no round 2 allowed; operator decides
+- [x] adversarial-reviewer r1: BLOCK, C1 exact repair; applied as dacb935
+- [ ] adversarial-reviewer resume on the C1 repair
+- [ ] STOP: SE cap reached with BLOCK; operator rules (another round, or stop)
 
-Next step: dispatch senior-engineer r1 and adversarial-reviewer r1 on the report commit.
+Next step: resume adversarial-reviewer on dacb935, then report to the operator.
