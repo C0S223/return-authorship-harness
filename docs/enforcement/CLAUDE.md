@@ -2,6 +2,9 @@
 
 Supplement to root `CLAUDE.md` §8.
 
+**Codex local app/CLI:** [coverage and probes](../codex-enforcement.md).
+The adapter shares these predicates; Claude statuses below do not prove Codex activation.
+
 ## Coverage and verification
 **`live` means wired and firing, not complete coverage.** Mark a cell live only in the policy edit that records the probe proving it on that target. Known bypasses are tracked as open items, not deferred protections.
 **Three targets, per-target Status columns.** Words: **live** probed there · **wired** configured, not yet probed in this tree · **unarmed** ships a placeholder (`OWNER/REPO`); installed, it refuses every push, uninstalled nothing runs · **cloud-off** exits 0 under the boundary marker (`unlock_consume.cloud_boundary()`) · **unregistered** no tool name arrives · **prose** no mechanism, the rule binds as text. **Status: working once Python is present; a live probe is a setup step (`SETUP.md`). Until one lands, cells read wired or prose and `ask` rows are advisory (root §8).**
@@ -31,7 +34,7 @@ Session-close copies escape, grant, integrity and `peer-` lines into tracked `ha
 Placeholders ship unarmed (`APPROVED_ORIGIN_URL` in `.githooks/pre-push`; `REPO_MATCH` in `scripts/cloud-setup.sh` arms no checkout); arming each is a policy edit. Steps for Windows, macOS/Linux, managed cloud and self-hosted: `SETUP.md`.
 
 ## Policy paths
-Paths, at every checkout root (the tree root and each `worktrees/<n>/`): `CLAUDE.md`, `AGENTS.md` and `AGENTS.override.md` at any depth, root `README.md`, `.claude/settings*.json`, `.claude/keybindings.json`, `.claude/hooks/**`, `.claude/agents/**`, `.codex/**`, `.git/config|hooks|info|refs`, `.githooks/**` and `tools/git-hooks/**` (the pre-push hook's tracked sources), `roles/**` and `graphs/**`, edits to existing `skills/`/`scripts/`/`templates/` files, `.claude/` ones included, and `goals/OBJECTIVES.md` where a checkout carries one. Redirects/tee count. CI's `ci_policy_check` adds `.github/**`; no hook carries it.
+Paths, at every checkout root (the tree root and each `worktrees/<n>/`): `CLAUDE.md`, `AGENTS.md` and `AGENTS.override.md` at any depth, root `README.md`, `.claude/settings*.json`, `.claude/keybindings.json`, `.claude/hooks/**`, `.claude/agents/**`, `.codex/**`, `.agents/skills/**`, `.git/config|hooks|info|refs`, `.githooks/**` and `tools/git-hooks/**` (the pre-push hook's tracked sources), `roles/**` and `graphs/**`, edits to existing `skills/`/`scripts/`/`templates/` files, `.claude/` ones included, and `goals/OBJECTIVES.md` where a checkout carries one. Redirects/tee count. CI's `ci_policy_check` also gates `.github/**`, `CODEX-SETUP.md` and `docs/codex-enforcement.md`.
 **Grant mechanism** (task-lived): `auth-policy <path>` or `auth-policy-batch <p1> ... <p8>`, typed as the whole of a new user turn, arms a grant for the named paths only, keyed to the session id; each allowed hit writes one `unlock-consumed` line, policy-integrity's credit for one difference until the grant ends. Only UNGRANTED differences alert. The grant ends at the first of: a new session, `revoke-policy` typed alone, a new unlock (either verb replaces all grants), or 8 h after arming. `auth-net` and `auth-env` stay one-shot.
 
 ## Roster maintenance

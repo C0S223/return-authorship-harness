@@ -1,0 +1,14 @@
+# Project defaults; the operator must verify effective settings after trust.
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+project_doc_fallback_filenames = ["CLAUDE.md"]
+
+[sandbox_workspace_write]
+network_access = false
+
+# Continuation via write_stdin does not repeat PreToolUse. Use legacy shell.
+[features]
+# Disabled until the operator authorizes the activation probes in CODEX-SETUP.md.
+hooks = false
+unified_exec = false
+unified_exec_tty = false

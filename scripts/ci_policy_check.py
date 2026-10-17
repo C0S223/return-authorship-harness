@@ -13,8 +13,8 @@ to HEAD; renames split into delete+add) with the live gate's is_policy(),
 loaded exactly as scripts/prepush_check.py loads it -- so "an existing file
 under scripts/, skills/ or templates/" means existing in THIS script's own
 checkout, which in the workflow is the default branch's at base/, never the PR's -- plus
-one rule the hook does not carry: anything under .github/ is policy here,
-because the workflow that runs this check lives there.
+rules the hook does not carry: .github/, CODEX-SETUP.md and
+docs/codex-enforcement.md configure CI or instruct Codex operation.
 
 Read-only: no network, no fetch, no writes.
 
@@ -37,17 +37,17 @@ from stamp_check import default_base, NO_DEFAULT  # noqa: E402
 
 
 # roles/** and graphs/** reach this check through is_policy(), like every
-# other tracked policy path; .github/** is the one rule added here.
+# other tracked policy path; CI also protects its workflow and Codex instructions.
 def is_github(path):
-    """The one rule is_policy() does not carry. Folded like every rule there."""
+    """Workflow policy paths. Folded like every rule in is_policy()."""
     return path.lower().startswith(".github/")
 
 
 def flagged(paths, checker):
-    """Repo-relative POSIX paths -> those that are policy: .github/**, or the
+    """Repo-relative POSIX paths -> CI/instruction additions or the
     live gate's is_policy() resolved against pc.ROOT, this script's checkout."""
     return [p for p in paths
-            if is_github(p) or checker(os.path.normcase(os.path.realpath(
+            if p.lower() in ("codex-setup.md", "docs/codex-enforcement.md") or is_github(p) or checker(os.path.normcase(os.path.realpath(
                 os.path.join(str(pc.ROOT), p))))]
 
 

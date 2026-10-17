@@ -32,7 +32,7 @@ LOG_DIR = os.path.join(ROOT, ".agent-log")
 WRITERS = {"Bash", "PowerShell", "Write", "Edit", "NotebookEdit", "Agent", "Task"}
 # Fixed roots (mechanism 2). `.git/refs` is not walked; the one ref every gate
 # reads as "the default branch", origin/HEAD, is watched as a file (FILES).
-DIRS = (".claude", ".codex", "scripts", "templates", "skills",
+DIRS = (".claude", ".codex", ".agents", "scripts", "templates", "skills",
         # The tracked pre-push hook sources (is_policy carries the rule)
         ".githooks", os.path.join("tools", "git-hooks"),
         # Role definitions and the grill and lane graphs (is_policy carries the rule)

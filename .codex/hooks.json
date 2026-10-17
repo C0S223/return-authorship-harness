@@ -1,0 +1,66 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=$(git rev-parse --show-toplevel) || exit 2; test -f \"$root/.codex/hooks/launch.sh\" || { echo \"codex-harness: launcher missing\" >&2; exit 2; }; sh \"$root/.codex/hooks/launch.sh\"",
+            "timeout": 30,
+            "commandWindows": "bash -lc 'root=$(git rev-parse --show-toplevel) || exit 2; test -f \"$root/.codex/hooks/launch.sh\" || { echo \"codex-harness: launcher missing\" >&2; exit 2; }; sh \"$root/.codex/hooks/launch.sh\"'"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=$(git rev-parse --show-toplevel) || exit 2; test -f \"$root/.codex/hooks/launch.sh\" || { echo \"codex-harness: launcher missing\" >&2; exit 2; }; sh \"$root/.codex/hooks/launch.sh\"",
+            "timeout": 30,
+            "commandWindows": "bash -lc 'root=$(git rev-parse --show-toplevel) || exit 2; test -f \"$root/.codex/hooks/launch.sh\" || { echo \"codex-harness: launcher missing\" >&2; exit 2; }; sh \"$root/.codex/hooks/launch.sh\"'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=$(git rev-parse --show-toplevel) || exit 2; test -f \"$root/.codex/hooks/launch.sh\" || { echo \"codex-harness: launcher missing\" >&2; exit 2; }; sh \"$root/.codex/hooks/launch.sh\"",
+            "timeout": 30,
+            "commandWindows": "bash -lc 'root=$(git rev-parse --show-toplevel) || exit 2; test -f \"$root/.codex/hooks/launch.sh\" || { echo \"codex-harness: launcher missing\" >&2; exit 2; }; sh \"$root/.codex/hooks/launch.sh\"'"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=$(git rev-parse --show-toplevel) || exit 2; test -f \"$root/.codex/hooks/launch.sh\" || { echo \"codex-harness: launcher missing\" >&2; exit 2; }; sh \"$root/.codex/hooks/launch.sh\"",
+            "timeout": 30,
+            "commandWindows": "bash -lc 'root=$(git rev-parse --show-toplevel) || exit 2; test -f \"$root/.codex/hooks/launch.sh\" || { echo \"codex-harness: launcher missing\" >&2; exit 2; }; sh \"$root/.codex/hooks/launch.sh\"'"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "root=$(git rev-parse --show-toplevel) || exit 2; test -f \"$root/.codex/hooks/launch.sh\" || { echo \"codex-harness: launcher missing\" >&2; exit 2; }; sh \"$root/.codex/hooks/launch.sh\"",
+            "timeout": 30,
+            "commandWindows": "bash -lc 'root=$(git rev-parse --show-toplevel) || exit 2; test -f \"$root/.codex/hooks/launch.sh\" || { echo \"codex-harness: launcher missing\" >&2; exit 2; }; sh \"$root/.codex/hooks/launch.sh\"'"
+          }
+        ]
+      }
+    ]
+  }
+}
