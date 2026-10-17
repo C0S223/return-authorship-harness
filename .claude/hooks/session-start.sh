@@ -16,7 +16,9 @@ trap 'exit 0' ERR
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 
 BRANCH="$(git -C "$ROOT" branch --show-current 2>/dev/null || echo '?')"
-DIRTY="$(git -C "$ROOT" status --porcelain 2>/dev/null | wc -l | tr -d '[:space:]')"
+# `|| true`: outside a git work tree status fails, and under pipefail that would
+# trip the ERR trap here and end the hook before the nudge and the log tail.
+DIRTY="$(git -C "$ROOT" status --porcelain 2>/dev/null | wc -l | tr -d '[:space:]' || true)"
 # Both arms use `[ ] && echo`: under `set -e` a command BEFORE the final && is
 # exempt, so a false test does not trip the ERR trap and swallow the rest of the
 # hook. Verified 2026-08-30 on both branches of this condition.
@@ -37,8 +39,14 @@ fi
 
 # First-run nudge (ONBOARDING.md): one line when setup armed the push guard
 # (APPROVED_ORIGIN_URL no longer the OWNER/REPO placeholder), the tour has not
-# ended or been skipped (no .agent-log/onboarded, an ignored marker), and the
-# session is not cloud (unlock_consume.py cloud_boundary()'s two markers).
+# ended or been skipped, and the session is not cloud (unlock_consume.py
+# cloud_boundary()'s two markers). The marker is .agent-log/onboarded (ignored by
+# Git), shared by every worktree: it counts in MAIN, the main checkout, or in ROOT
+# (an older per-checkout marker still counts). MAIN is the parent of the absolute
+# `git rev-parse --git-common-dir` when that folder is named .git; for a bare or
+# separate git dir, or when git fails, MAIN is ROOT. Each git call ends in
+# `|| true`, so a git failure cannot trip the ERR trap and drop the log tail.
+# No --path-format (git 2.31): the path is made absolute with cd and pwd.
 # "Armed" is judged on the value sh would assign: the LAST unindented
 # assignment (the last one wins), quotes and any trailing comment stripped.
 # A missing hook file or URL line, an empty value, or the placeholder is not armed.
@@ -49,10 +57,18 @@ case "$URL" in
   \'*) URL="${URL#\'}"; URL="${URL%%\'*}" ;;
   *) URL="${URL%%[[:space:]]*}" ;;
 esac
+MAIN="$ROOT"
+GCD="$(cd "$ROOT" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null || true)"
+if [ -n "$GCD" ]; then
+  GABS="$(cd "$ROOT" 2>/dev/null && cd "$GCD" 2>/dev/null && pwd || true)"
+  case "$GABS" in
+    ?*/.git) MAIN="${GABS%/.git}" ;;
+  esac
+fi
 case "$URL" in
   ''|*OWNER/REPO*) ;;
   *)
-    if [ ! -e "$ROOT/.agent-log/onboarded" ] && [ "${CLAUDE_CODE_REMOTE:-}" != "true" ] && [ "${HARNESS_BOUNDARY:-}" != "selfhost" ]; then
+    if [ ! -e "$MAIN/.agent-log/onboarded" ] && [ ! -e "$ROOT/.agent-log/onboarded" ] && [ "${CLAUDE_CODE_REMOTE:-}" != "true" ] && [ "${HARNESS_BOUNDARY:-}" != "selfhost" ]; then
       echo "session-start: Setup is complete. Say 'onboard me' for a short tour. (Agent: offer this to the person once; the tour is ONBOARDING.md.)"
     fi
     ;;
