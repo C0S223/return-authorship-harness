@@ -262,13 +262,12 @@ class MechanismNamesSync(unittest.TestCase):
 # One regex per denied capability, grouped under the S2 L0 class it belongs
 # to, so dropping any single covered entry goes red. Grouping follows the
 # hub's baseline reading of S2 L0 in WORK-ORDER.md; `Workflow` under
-# persistence and `suggest_connectors` under plugins are HUB-AUTHORED
-# placements, not ruled by the contract text itself -- marked here, not
-# asserted as doctrine.
+# persistence is a HUB-AUTHORED placement, not ruled by the contract text
+# itself -- marked here, not asserted as doctrine.
 L0_DENY_REGEXES = {
     "persistence": [
         r"^CronCreate$", r"^CronDelete$", r"^ScheduleWakeup$",
-        r"scheduled-tasks", r"spawn_task", r"^RemoteTrigger$",
+        r"scheduled-tasks", r"^RemoteTrigger$",
         # The Routine surface's schedule/spawn forms, by name.
         # create_session left the deny for settings ask.
         r"claude-code-remote__send_later$",
@@ -278,12 +277,14 @@ L0_DENY_REGEXES = {
         r"Claude_Code_Remote__watch_url$", r"Claude_Code_Remote__update_trigger$",
         r"^Workflow$",  # hub-authored placement, not contract-ruled
     ],
-    "desktop/Chrome MCPs": [r"computer-use", r"claude-in-chrome"],
-    "plugins": [
-        r"SuggestPluginInstall",
-        r"^Bash\(claude plugin:\*\)$",
-        r"suggest_connectors",  # hub-authored placement, not contract-ruled
+    # ADR 0002 lifted the other desktop/Chrome inputs.
+    "browser javascript_tool and batches": [
+        r"^mcp__claude-in-chrome__javascript_tool$",
+        r"^mcp__Claude_Browser__javascript_tool$",
+        r"^mcp__Claude_Browser__browser_batch$",
+        r"^mcp__claude-in-chrome__browser_batch$",
     ],
+    "plugins": [r"^Bash\(claude plugin:\*\)$"],
     "catchall spawn": [r"general-purpose"],
 }
 

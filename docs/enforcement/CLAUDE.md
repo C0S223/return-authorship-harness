@@ -13,7 +13,7 @@ The adapter shares these predicates; Claude statuses below do not prove Codex ac
 
 | Rule class | Layer | Mechanism | Windows | Managed | Self-hosted |
 |---|---|---|---|---|---|
-| Persistence, desktop clipboard/teach/display, named Chrome inputs, browser batches, plugins, catchall spawn | L0 | settings deny · trigger-shape | wired (deny) | wired (deny) | wired (deny) |
+| Persistence, browser `javascript_tool`, browser batches, plugin CLI, catchall spawn | L0 | settings deny · trigger-shape | wired (deny) | wired (deny) | wired (deny) |
 | Policy-path mutation | L1 | policy-integrity (record) · policy-mutate + `auth-policy`(-batch) (text gate) | wired | cloud-off (the PR is the authorization; CI's `operator-merge` holds it for the operator) | cloud-off |
 | File-tool writes outside tree | L1 | filetool-scope | wired (ask) | cloud-off (VM disposal) | cloud-off (container disposal) |
 | Shell writes outside tree | L1 | shell-scope (`--log` is log-escape's trail) | wired (ask) | cloud-off (`--log` only; blind inside script bodies) | cloud-off |

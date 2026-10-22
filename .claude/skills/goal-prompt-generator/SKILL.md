@@ -103,24 +103,32 @@ One block of plain prose, at most 4,000 characters (measure it), in this order:
    Everything else stays the operator's under `CLAUDE.md` §2-§3; a `/goal` is not an authorization,
    and the run performs no act that needs the operator's yes. Name what it must not open unless
    granted: pull requests, scheduled check-ins or reminders, other sessions.
-5. **Done when.** Open with `Done when your last message shows output from commands run
-   in this session:` and list each item, such as a test's summary line,
-   `git log -1 --oneline` of the pushed branch, a file's path. Each check reads content,
+5. **Done when.** Open with `Done when EITHER your last message shows output from commands
+   run in this session:` and list each item, such as a test's summary line,
+   `git log -1 --oneline` of the pushed branch, a file's path; then close with `OR your
+   last message names a stop from item 7 and what clears it.` A judge can miss a stop clause
+   outside the done line, so the stop-early branch lives inside it. Each check reads content,
    not presence: it opens the line or runs the test, never only confirms that a row or file
    exists. A finite count beats a maximum. If checks the run cannot see will grade it, say
-   that they exist and what they check, never what they contain.
+   that they exist and what they check, never what they contain. Anchor each pattern (`^` at
+   line start, or a whole-line match such as `grep -x`); a bare word or `-F` string still
+   matches inside a comment. Where a base commit exists, dry-run each check on it before
+   hand-over (`git show <base>:<path>` needs no checkout); the goal states each check's expected
+   output on base and when done. A check already true on base needs a reason. A check that cannot
+   reach its done output without touching a frozen path is rewritten, or item 3 is widened.
+   A review-stamp check selects the lane's latest review file and evaluates that file's
+   stamp; matches in earlier reviews cannot satisfy it.
 6. **Long runs.** A progress file inside item 3's scope that the run rewrites after each
    step, and a compaction line: after any context compaction, read the progress file, the
    last notes and `git log --oneline -10` before acting, and finish the step in progress.
    In a cloud session, commit after each step on the run's branch, never the default
    branch, and push where the goal grants it, so a cut-off loses at most one step.
-7. **Stop early.** The condition also counts as met when the run reaches an act that needs
-   the operator's yes (push, PR, merge, policy edit, delete, send, install) and has printed that exact
-   act, ready for the operator, and has not run it. It also counts as met at a blocker it cannot
-   clear, printed with what it needs. Add a turn clause sized to the work,
-   `or stop after N turns`, and a time backstop: the run prints `date -u` in its first
-   turn, and the goal is also done once a later `date -u` it prints is H hours past that,
-   with item 5's evidence as it stands then.
+7. **Stop early.** These fill item 5's OR branch, each named there: an act that needs the
+   operator's yes (push, PR, merge, policy edit, delete, send, install), printed exact,
+   ready for the operator, not run; a blocker the run cannot clear, printed with what it
+   needs; a turn clause sized to the work, `or stop after N turns`; a time backstop (the
+   run prints `date -u` in its first turn, and a later `date -u` it prints H hours past
+   that counts), with item 5's evidence as it stands then.
 8. **Report.** The last turn prints the done items and a short account of what changed and
    what was left.
 
@@ -153,5 +161,5 @@ the away question above applies.
 ## Defaults
 
 These are this skill's defaults, not rulings: the ten-lookup budget, the three-question
-cap, the stop-early clause, and running the grill inline on `graphs/grill.md`'s question
+cap, the stop-early branch of the done line, and running the grill inline on `graphs/grill.md`'s question
 rules rather than triggering the grill graph.
