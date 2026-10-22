@@ -66,7 +66,8 @@ Refuse when any of these holds:
    is never the approval. If the work quotes an authorization, the quote must be
    verifiable and complete — a truncated quote that inverts its meaning is a refuse.
 7. **Cross-session persistence anywhere.** §2 denies it outright — schedulers, cron,
-   wakeups, spawn_task, loop sentinels, anything that outlives the run. No redesign
+   wakeups, loop sentinels, anything that outlives the run (root §2's operator-started
+   `spawn_task` card excepted). No redesign
    salvages it.
 8. **It decides too little.** A known fork left "to be decided during the run".
 

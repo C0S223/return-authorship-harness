@@ -21,10 +21,11 @@ def main():
     assert ci.flagged(paths, checker) == paths, 'Codex policy escaped operator review'
     assert (ROOT / 'AGENTS.md').read_bytes() == (ROOT / 'CLAUDE.md').read_bytes()
     original = subprocess.run(['git', '-C', str(ROOT), 'show',
-                              '759372bd98a7e25381ee413a045ec81a927f994f:CLAUDE.md'],
+                              'f19559a78a499312d979e489a26a078ea54b254e'],
                              capture_output=True)
-    # Template clones need not retain this port's historical object. Where the
-    # object exists, ensure equal contracts did not both drift from the original.
+    # The pin is CLAUDE.md's blob (`git hash-object CLAUDE.md`), stable
+    # whatever the merge method. Template clones need not retain this object. Where
+    # it exists, ensure equal contracts did not both drift from the pinned one.
     if original.returncode == 0:
         assert original.stdout == (ROOT / 'CLAUDE.md').read_bytes(), 'original contract changed'
     config = tomllib.loads((ROOT / '.codex/config.toml').read_text())
