@@ -12,6 +12,17 @@ ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / ".claude" / "hooks" / "session-start.sh"
 
 
+def non_git_env(root, ceiling):
+    """Stop discovery before a checkout containing TMPDIR can be found."""
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=str(root),
+               GIT_CEILING_DIRECTORIES=str(ceiling.resolve()))
+    probe = subprocess.run(["git", "-C", str(root), "rev-parse", "--git-dir"],
+                           capture_output=True, text=True, env=env)
+    if probe.returncode == 0:
+        raise AssertionError("non-git fixture resolved a git directory: " + probe.stdout)
+    return env
+
+
 @unittest.skipUnless(shutil.which("bash"), "needs bash")
 class SessionStartBranchLine(unittest.TestCase):
     def setUp(self):
@@ -206,8 +217,8 @@ class SessionStartSharedMarker(unittest.TestCase):
         self.assertTrue((linked / ".githooks" / "pre-push").is_file())
         return main, linked
 
-    def nudges(self, root):
-        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(root))
+    def nudges(self, root, env=None):
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(root)) if env is None else env.copy()
         env.pop("CLAUDE_CODE_REMOTE", None)
         env.pop("HARNESS_BOUNDARY", None)
         r = subprocess.run(["bash", str(HOOK)], capture_output=True, text=True, env=env)
@@ -234,13 +245,13 @@ class SessionStartSharedMarker(unittest.TestCase):
         root.mkdir()
         self.armed(root)
         self.mark(root)
-        self.assertEqual(self.nudges(root), [])
+        self.assertEqual(self.nudges(root, non_git_env(root, self.tmp)), [])
 
     def test_non_git_folder_no_marker_one_line(self):
         root = self.tmp / "plain"
         root.mkdir()
         self.armed(root)
-        self.assertEqual(len(self.nudges(root)), 1)
+        self.assertEqual(len(self.nudges(root, non_git_env(root, self.tmp))), 1)
 
     def test_non_git_folder_still_prints_the_log_tail(self):
         # Outside a git work tree no git failure may end the hook early.
@@ -250,7 +261,7 @@ class SessionStartSharedMarker(unittest.TestCase):
                                check=True).stdout.strip()
         (root / ".agent-log").mkdir()
         (root / ".agent-log" / (today + ".md")).write_text("LOGLINE-Y\n", encoding="utf-8")
-        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(root))
+        env = non_git_env(root, self.tmp)
         r = subprocess.run(["bash", str(HOOK)], capture_output=True, text=True, env=env)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("LOGLINE-Y", r.stdout)
@@ -352,8 +363,8 @@ class SessionStartNoOriginClaimWithoutGit(unittest.TestCase):
             self.assertIsNone(shutil.which("git", path=str(d)))
         return str(d)
 
-    def run_hook(self, root, path=None):
-        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(root))
+    def run_hook(self, root, path=None, env=None):
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(root)) if env is None else env.copy()
         if path is not None:
             env["PATH"] = path
         r = subprocess.run([shutil.which("bash"), str(HOOK)], capture_output=True,
@@ -371,7 +382,30 @@ class SessionStartNoOriginClaimWithoutGit(unittest.TestCase):
         root = self.tmp / "plain"
         root.mkdir()
         self.log(root)
-        self.assert_no_origin_claim_and_tail(self.run_hook(root))
+        self.assert_no_origin_claim_and_tail(
+            self.run_hook(root, env=non_git_env(root, self.tmp)))
+
+    def test_git_directory_without_work_tree_reports_unknown_origin(self):
+        # --git-dir succeeds here, while --show-toplevel would hide the warning.
+        for bare in (True, False):
+            with self.subTest(bare=bare):
+                repo = self.tmp / ("bare.git" if bare else "tree")
+                repo.mkdir()
+                self.git(repo, "init", "-q", "-b", "main", *(["--bare"] if bare else []))
+                root = repo if bare else repo / ".git"
+                # Pin bare-repository discovery: safe.bareRepository=explicit in the
+                # host's config would hide both roots from the hook and from this probe.
+                env = dict(os.environ, CLAUDE_PROJECT_DIR=str(root), GIT_CONFIG_COUNT="1",
+                           GIT_CONFIG_KEY_0="safe.bareRepository", GIT_CONFIG_VALUE_0="all")
+                for option, succeeds in (("--git-dir", True), ("--show-toplevel", False),
+                                         ("--verify", False)):
+                    args = ["git", "-C", str(root), "rev-parse", option]
+                    if option == "--verify":
+                        args.append("refs/remotes/origin/HEAD")
+                    probe = subprocess.run(args, capture_output=True, text=True, env=env)
+                    self.assertEqual(probe.returncode == 0, succeeds, probe.stderr)
+                self.assertIn("origin's default branch is unknown",
+                              self.run_hook(root, env=env))
 
     def test_linked_worktree_with_origin_head_set_and_git_unusable(self):
         main = self.tmp / "main"
