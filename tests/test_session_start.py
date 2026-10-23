@@ -393,7 +393,10 @@ class SessionStartNoOriginClaimWithoutGit(unittest.TestCase):
                 repo.mkdir()
                 self.git(repo, "init", "-q", "-b", "main", *(["--bare"] if bare else []))
                 root = repo if bare else repo / ".git"
-                env = dict(os.environ, CLAUDE_PROJECT_DIR=str(root))
+                # Pin bare-repository discovery: safe.bareRepository=explicit in the
+                # host's config would hide both roots from the hook and from this probe.
+                env = dict(os.environ, CLAUDE_PROJECT_DIR=str(root), GIT_CONFIG_COUNT="1",
+                           GIT_CONFIG_KEY_0="safe.bareRepository", GIT_CONFIG_VALUE_0="all")
                 for option, succeeds in (("--git-dir", True), ("--show-toplevel", False),
                                          ("--verify", False)):
                     args = ["git", "-C", str(root), "rev-parse", option]
