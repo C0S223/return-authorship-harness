@@ -1837,7 +1837,7 @@ class ExecutionRefusalCases:
         approved = self.approve(revision)
         self._commit(self.review("grills/substantive.md", "BLOCK", approved), "finding")
         self._commit({"notes.md": "prose repair\n"}, "void block but not code approval")
-        # The gate needs AR for the prose; the SE approval above covers the code.
+        # notes.md voids the SE approval above (covers=no), so an AR approval alone fails the gate.
         self.approve(self._git("rev-parse", "HEAD"), "grills/ar.md", self.AR)
         self.assert_gate(1)
 
