@@ -13,9 +13,9 @@ has no board or no memory store): each step whose connector is absent is skipped
 action-log line naming it, and nothing is dropped. What a skipped step would write (step
 2's items, notes and closes for the board; its decisions and session record for memory)
 goes into a closeout handoff under `handoffs/` instead, one line each (this fallback is the
-only case that writes a closeout handoff file); if they overrun its 40 lines, say so on its
-first line rather than cut one (the one exception to step 2's 40-line cap). With no board, step 1's board section reads **could not compute**. A step
-whose connector is present runs as written.
+only case that writes a closeout handoff file); if they run past 40 lines, say so on its
+first line rather than cut one. With no board, step 1's board section reads **could not
+compute**. A step whose connector is present runs as written.
 
 ## The contract
 
