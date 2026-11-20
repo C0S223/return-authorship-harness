@@ -16,7 +16,7 @@ The wording is the source copy's reviewed wording; no line differs from it.
   close request's yes), and the default branch stays human-executed under all of them.
 
 **Acceptance check at 54b6696.**
-- a: `git diff 431d110 54b6696` touches the five sites and nothing else.
+- a: `git diff 431d110 54b6696` touches the five sites and this lane's `work/`, nothing else.
 - b: `git-guard.py` AST against 431d110 compares SAME.
 - c: `python3 scripts/run_tests.py` gives `44 suites: 44 pass, 0 fail, 0 skip (20 tests
   skipped inside 6 passing suites)`; `cmp CLAUDE.md AGENTS.md` prints nothing.
