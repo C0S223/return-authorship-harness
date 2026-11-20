@@ -24,8 +24,9 @@ contradictions, acceptance check a, completeness critic). Fixed before freeze: t
 periods left by the scrub (a `scripts/prepush_check.py` docstring, a
 `.claude/hooks/session-close.sh` comment), a host-specific article in
 `tests/test_filetool_scope.py`, two decision labels with no record in this tree in
-`scripts/test_stamp_check.py`, and two overlong `graphs/lane.md` lines. Acceptance check a
-held for the eight files round 1 did not rebuild and for the prose files.
+`scripts/test_stamp_check.py`, and two overlong `graphs/lane.md` lines. The pass's acceptance
+agent read check a as holding for the eight files round 1 did not rebuild and for the prose
+files; that is its read, and no reviewer has rebuilt them.
 
 **Checks on d9c3914.** `python3 scripts/run_tests.py` gives `44 suites: 44 pass, 0 fail, 0 skip
 (20 tests skipped inside 6 passing suites)`; `cmp CLAUDE.md AGENTS.md` prints nothing;
@@ -43,8 +44,17 @@ push, §4 no handoff file with board and memory connected):
 The operator ruled "Defer, fix privately first (Recommended)": these lines are out of scope here. They get fixed in the
 source copy first, and a later template refresh carries the fix down.
 
-**Residuals.** The two uid-scratchpad cases in each of `tests/test_filetool_scope.py` and
-`tests/test_shell_scope.py` skip where the temp directory is `/tmp`, as on Linux CI, so CI does
-not prove them; they ran red, then green, with `TMPDIR` set elsewhere. `scripts/test_claude_md_budget.py`
+**Residuals.** In `tests/test_filetool_scope.py` and `tests/test_shell_scope.py`, the red-first
+cases for the uid-scratchpad change are the own-uid allows (and, in shell, the recorded commit),
+red on base hooks and green on the candidate with `TMPDIR` off `/tmp` (`DID-SWING2.md`). The two
+cases in each file that skip where the temp directory is `/tmp` pass on base hooks too, and with
+`TMPDIR=/tmp`, as on Linux CI, base hooks pass the whole class: CI carries no red-first proof of
+this change. (Corrected after senior-engineer round 2, note N2.) `scripts/test_claude_md_budget.py`
 has 9 bytes of headroom. `PYTHONUTF8` in `.claude/settings.json` has no recorded reason in this
 tree. Every commit carries the session attribution trailer, as on base.
+
+**After round 2.** adversarial-reviewer resume: APPROVE, all seven conditions discharged.
+senior-engineer round 2 (the cap): BLOCK on F4, a test comment at `scripts/test_stamp_check.py:1840`
+that said the SE approval covers when the gate prints `covers=no`; repaired in 1a62f36, comment only.
+The operator ruled "Fix + 1-line SE re-stamp (Recommended)": a third code round, past the cap by that
+ruling, grades only that diff, beside the extra adversarial pass on the whole final diff.
