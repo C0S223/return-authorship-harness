@@ -39,7 +39,9 @@ push, §4 no handoff file with board and memory connected):
 - `graphs/grill.md:5` and `:38-43`
 - `ONBOARDING.md:75-77`
 
-`.claude/skills/check-prs/SKILL.md:70-72` still cites the old stamp-voiding rule. The source copy carries the same lines. Put to the operator.
+`.claude/skills/check-prs/SKILL.md:70-72` still cites the old stamp-voiding rule. The source copy carries the same lines.
+The operator ruled "Defer, fix privately first (Recommended)": these lines are out of scope here. They get fixed in the
+source copy first, and a later template refresh carries the fix down.
 
 **Residuals.** The two uid-scratchpad cases in each of `tests/test_filetool_scope.py` and
 `tests/test_shell_scope.py` skip where the temp directory is `/tmp`, as on Linux CI, so CI does
