@@ -38,7 +38,7 @@ Two corollaries:
   reachable by `resume.sh`.
 - **Any session handed a handoff path** — by the operator, by a hub dispatching a
   delegate, or by reading `handoffs/` at start.
-- `handoffs/`, including `auto/`, is tracked evidence. That is where these files are
+- `handoffs/`, including `auto/`, is tracked evidence (a closeout adds no handoff file where the board and memory connectors exist; `auto/` holds the cloud audit copy). That is where these files are
   kept; this is what a reader owes them once kept.
 
 **What refreshes it:** an operator ruling, then a session lands the edit. No hook and no resumed session edits it.

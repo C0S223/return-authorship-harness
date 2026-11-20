@@ -186,6 +186,24 @@ notes, never conditions, and never start a round. Findings are claims to verify:
 demonstrated reviewer error returns with counterevidence for delta review, but the hub
 cannot discard a blocking finding and declare the review passed.
 
+**Execution refusals.** A `senior-engineer` may classify a BLOCK caused solely by inability
+to perform required execution, with no surviving substantive findings, using the exact
+fourth header line `BLOCK-KIND: EXECUTION-REFUSAL`; the field on an `adversarial-reviewer`
+stamp fails the gate. Unclassified BLOCKs remain substantive; the hub never infers a
+category from prose or retrofits an earlier review, and a gate refuses a refusal file
+whose bytes changed after filing. Invalid, duplicate, misplaced or contradictory category
+metadata fails the gate. Commit the refusal unchanged before a separately authorized
+independent same-kind review: its APPROVE must cover HEAD, must not be superseded by any
+same-kind BLOCK, and must name a revision strictly descended from the refusal's revision
+that already contains the same refusal file bytes as HEAD. The gate prints which APPROVE
+resolves each refusal. A BLOCK still covering HEAD (nothing after its revision but flat
+grills or audit-copy additions and clean base merges) blocks even beside a later APPROVE.
+Any other commit, a desk report included, voids any BLOCK, a refusal included, as before; a
+voided refusal no longer blocks and needs no resolution, so the gate tests none of these
+conditions and prints nothing for it. Older-approval suppression keeps its existing rule.
+This protocol grants no retry, dispatch, extra review round or historical
+migration; the round caps and operator approvals below still apply.
+
 **Round caps.** **Code** gets one `senior-engineer` round, and a second only when round 1
 has a C1 or C2 finding; **prose** gets one `adversarial-reviewer` round. A round is what
 this file elsewhere calls a swing. A delta re-review is the next round even without a new
@@ -206,16 +224,16 @@ resumed) with a fresh `/review-order` header and the repair diff. It files
 breaking anything the repair touches; anything else it finds goes in the PR body, not a new
 round. One resume per round, and it is not a round. Its BLOCK stands like any other.
 
-**Stamps and later commits.** On a lane both kinds review, a repair commit voids the
-APPROVE of each kind whose files it changes: `.md` for `adversarial-reviewer`, anything
-else for `senior-engineer` (`scripts/stamp_check.py`, `covers()`). A kind whose APPROVE is
-voided re-stamps before landing, grading only the repair diff, without counting against the
-caps. No file is committed after the REVISION of the APPROVE that covers its kind, except
-grill additions and files a base merge takes unchanged from one parent. Merging the default
-branch into the lane after a stamp voids only what the merge itself resolved: a
-hand-resolution, a file the merge alone added or removed, or a file both sides changed
-differently. A base merge that takes every file unchanged from the one side that changed it
-needs no re-stamp; a clean base merge leaves a BLOCK standing.
+**Stamps and later commits.** A repair commit voids every APPROVE, whatever the kind of
+the files it changes (`covers()` in `scripts/stamp_check.py`). Each voided kind re-stamps
+before landing, grading only the repair diff, without counting against the caps. Nothing
+is committed after the REVISION of a covering APPROVE except the additions `covers()`
+exempts (grills and the cloud audit copy under `handoffs/auto/`) and, on a `lane-<id>`
+head, the lane's own desk `.md` files under `work/<id>-<slug>/`; a desk commit still voids
+a BLOCK. Merging the default branch into the lane after a stamp voids it only when the merge
+changes a path the lane also changed. A base merge that changes only base paths needs no re-stamp; a clean base
+merge leaves a BLOCK standing. Once the base has moved, the REVISION must sit on the
+tip's first-parent chain, and each later merge needs two parents and one merge-base.
 
 **Polish.** Reviewer notes that block nothing (an adversarial reviewer's
 `## Notes for polish`, or a `senior-engineer` note that touches only copy) are **polish**.
@@ -226,9 +244,9 @@ PR body lists every polish edit under "Not re-reviewed".
 
 **The hub commits reviewer files into the lane** as a standing rule (`CLAUDE.md` §2). At
 landing, `git diff --no-renames --name-status <candidate> <tip>` must list only `A` lines,
-each a review file returned for this lane or one of the lane's desk reports: the two
-exceptions to candidate-equals-tip. After a base merge, run that diff once per
-first-parent segment, leaving each base merge out.
+each a review file returned for this lane, one of the lane's desk reports, or a cloud audit
+copy under `handoffs/auto/` that a closeout committed: the exceptions to candidate-equals-tip.
+After a base merge, run that diff once per first-parent segment, leaving each base merge out.
 
 ### 4. Hub — land
 

@@ -384,7 +384,10 @@ class Wiring(unittest.TestCase):
         (self.hooks / "net-post.py").unlink()
         r = self.preflight()
         self.assertEqual(r.returncode, 2)
-        self.assertIn("script missing: %s" % (self.hooks / "net-post.py"), r.stderr)
+        # The hook prints "$ROOT/<rel>": CLAUDE_PROJECT_DIR as given, then a '/'
+        # path. On Windows str(self.hooks / ...) has backslashes throughout and never
+        # matched, so build the line the way the hook does.
+        self.assertIn("script missing: %s/.claude/hooks/net-post.py" % self.proj, r.stderr)
 
     @unittest.skipIf(JQ is None, "jq not found")
     def test_preflight_blocks_a_missing_launcher(self):

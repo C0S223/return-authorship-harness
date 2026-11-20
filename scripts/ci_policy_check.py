@@ -14,7 +14,9 @@ loaded exactly as scripts/prepush_check.py loads it -- so "an existing file
 under scripts/, skills/ or templates/" means existing in THIS script's own
 checkout, which in the workflow is the default branch's at base/, never the PR's -- plus
 rules the hook does not carry: .github/, CODEX-SETUP.md and
-docs/codex-enforcement.md configure CI or instruct Codex operation.
+docs/codex-enforcement.md configure CI or instruct Codex operation, and
+every .claude/skills/ path counts whether or not it exists, so a PR adding or
+deleting a skill waits for the operator too.
 
 Read-only: no network, no fetch, no writes.
 
@@ -43,11 +45,15 @@ def is_github(path):
     return path.lower().startswith(".github/")
 
 
+# One rule for both gates: prepush_check.is_skill (new and deleted skills).
+is_skill = pc.is_skill
+
+
 def flagged(paths, checker):
     """Repo-relative POSIX paths -> CI/instruction additions or the
     live gate's is_policy() resolved against pc.ROOT, this script's checkout."""
     return [p for p in paths
-            if p.lower() in ("codex-setup.md", "docs/codex-enforcement.md") or is_github(p) or checker(os.path.normcase(os.path.realpath(
+            if p.lower() in ("codex-setup.md", "docs/codex-enforcement.md") or is_github(p) or is_skill(p) or checker(os.path.normcase(os.path.realpath(
                 os.path.join(str(pc.ROOT), p))))]
 
 

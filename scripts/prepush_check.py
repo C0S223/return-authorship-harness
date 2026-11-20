@@ -118,17 +118,26 @@ def _load_runner(runner_path=None):
         return None
 
 
+def is_skill(path):
+    """Instruction-bearing skills, added, edited or deleted. is_policy() flags
+    only EXISTING files under skills/, so a new skill would pass unseen.
+    ci_policy_check uses this same rule."""
+    return path.lower().startswith(".claude/skills/")
+
+
 def policy_flagged(files, hook_path=None):
-    """Repo-relative POSIX paths -> the subset the live gate calls policy.
+    """Repo-relative POSIX paths -> the subset the live gate calls policy,
+    plus every .claude/skills/ path (is_skill).
     A flagged commit is not wrong, but it needed a typed one-shot grant, so
     the reviewer must see it called out rather than buried in a diffstat.
     Known boundary, inherited from the gate: under skills/scripts/templates
-    only EXISTING files flag, so a path this range DELETED will not."""
+    only EXISTING files flag, so a path this range DELETED will not --
+    except under .claude/skills/, which flags whether or not it exists."""
     checker = _load_is_policy(hook_path)
     if checker is None:
         return list(files)
     return [f for f in files
-            if checker(os.path.normcase(os.path.realpath(
+            if is_skill(f) or checker(os.path.normcase(os.path.realpath(
                 os.path.join(str(ROOT), f))))]
 
 

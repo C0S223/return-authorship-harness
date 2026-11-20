@@ -56,6 +56,19 @@ and does not install packages, change machine settings or publish anything.
    session, attempting the same edit must refuse without its own grant. Inspect
    the arm/consume/revoke/deny audit lines. Leave the probe file until its cleanup
    is separately authorized; do not turn setup into an unapproved deletion.
+   **Compaction (STOP: separate, specific approval; a throwaway session only).**
+   The person types `auth-policy .codex/probe-<unique>.txt`, then runs `/compact`.
+   The identical patch must refuse, and the log must show `unlock-revoked … pre-compact`
+   and a `startup … compact epoch:…` line. If no `precompact` line appears, execution or
+   audit is unverified. Inspect the hook response and client event evidence; absence
+   alone does not establish residual (b). The grant must still be refused after the
+   compaction either way. Then, in a disposable checkout the person controls, with the
+   person making the temporary fixture changes there (as in step 9): with the grant file and day log made unwritable,
+   `/compact` must be refused and the thread left uncompacted; with a deliberately
+   crashing or timing-out PreCompact hook, record whether the client compacts anyway
+   (residual (a)); near the context limit with a refusing hook, record what the session
+   does (residual (c)). Until these pass, the compaction revoke stays **wired, unprobed**
+   (`docs/codex-enforcement.md`).
 8. Check roster behavior without starting work: with specific approval for the
    refusal probe, request an off-roster `default` agent with a harmless read task.
    It must be denied before a child exists. A valid custom-role probe is a real

@@ -1,6 +1,7 @@
 {
   "env": {
-    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "350000"
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "350000",
+    "PYTHONUTF8": "1"
   },
   "permissions": {
     "deny": [

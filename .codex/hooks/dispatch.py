@@ -4,11 +4,13 @@ No claim of a hostile-agent boundary: this process and its state are agent-writa
 See docs/codex-enforcement.md for transport assumptions and activation probes.
 """
 import contextlib
+import datetime
 import fnmatch
 import hashlib
 import importlib.util
 import io
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -40,20 +42,211 @@ def load(name):
     return module
 
 
-def audit(sid, event, detail):
+def audit(sid, event, detail, stamp=False):
+    """Append one adapter line. One clock read names the day file and the time,
+    so a line cannot straddle midnight. `stamp` appends ` epoch:<seconds>` from
+    that same read: the machine-readable time a compaction record carries,
+    because local wall-clock text is ambiguous in a DST fall-back hour and
+    shifts under a TZ change."""
     directory = ROOT / '.agent-log'
     directory.mkdir(exist_ok=True)
+    now = time.time()
+    local = time.localtime(now)
     # No command, prompt, tool arguments or secrets in the adapter trail.
     safe = re.sub(r'[^A-Za-z0-9_.:/ -]', '?', str(detail))[:240]
-    with (directory / (time.strftime('%Y-%m-%d') + '.md')).open('a', encoding='utf-8') as f:
-        f.write('- %s [codex] %s sid=%s %s\n' % (time.strftime('%H:%M:%S'), event, sid, safe))
+    if stamp:
+        safe += ' epoch:%.6f' % now
+    with (directory / (time.strftime('%Y-%m-%d', local) + '.md')).open('a', encoding='utf-8') as f:
+        f.write('- %s [codex] %s sid=%s %s\n' % (time.strftime('%H:%M:%S', local), event, sid, safe))
 
 
-def run_guard(name, data, sid):
+GRANT_STEMS = ('policy', 'net', 'env', 'agent')
+GRANT_WINDOW = 8 * 3600   # the longest grant lifetime (the policy task grant's cap)
+COMPACT_LINE = re.compile(r'- (\d\d:\d\d:\d\d) \[codex\] startup sid=(\S+) compact(?: epoch:(\d{1,12}(?:\.\d{1,9})?))?')
+# Supported timezone-offset bound: real offsets run UTC-12 to UTC+14, a 26 h
+# spread. Day files read: every calendar date, inclusive, from (now - 8 h - 26 h)
+# to (now + 26 h) in local time, so a TZ change between writing and reading
+# cannot hide a record's file. Legacy wall-clock times get the same 26 h plus a
+# DST hour of slack.
+TZ_SPREAD = 26 * 3600
+LEGACY_SLACK = TZ_SPREAD + 3600
+
+
+def day_files(now):
+    first = datetime.date.fromtimestamp(now - GRANT_WINDOW - TZ_SPREAD)
+    last = datetime.date.fromtimestamp(now + TZ_SPREAD)
+    return [(first + datetime.timedelta(days=n)).isoformat() for n in range((last - first).days + 1)]
+COMPACT_REFUSED = 'codex-harness: grant revocation could not be recorded; compaction refused'
+
+
+def grant_path(stem, sid):
+    return ROOT / '.agent-log' / (stem + '-unlock-' + sid + '.json')
+
+
+def compaction_cutoff(sid):
+    """End of the second of this sid's latest compaction record, from its epoch.
+
+    The append-only `startup ... compact epoch:<s>` line is the compaction
+    record; no new state file. The cutoff comes from the numeric epoch, never
+    from the wall-clock text, and is the END of that second: a grant armed in
+    the compaction's own second counts as before it.
+
+    Fail closed (this docstring is the record):
+    - an unreadable day log gives +inf, so every existing grant of EVERY
+      session reads as stale until the log is readable again;
+    - a legacy record without an epoch (written before records carried one)
+      gives +inf when its wall-clock time, read with LEGACY_SLACK (the 26 h
+      offset spread plus a DST hour), could fall inside the last 8 h: that session's grants,
+      fresh ones included, stay refused until the record ages out, so start a
+      new session.
+    """
+    now = time.time()
+    days = day_files(now)
+    cutoff = None
+    for day in days:
+        try:
+            text = (ROOT / '.agent-log' / (day + '.md')).read_text(encoding='utf-8')
+        except FileNotFoundError:
+            continue
+        except Exception:
+            return float('inf')
+        for line in text.splitlines():
+            match = COMPACT_LINE.fullmatch(line)
+            if not match or match[2] != sid:
+                continue
+            if match[3] is not None:
+                at = math.floor(float(match[3])) + 1
+            else:
+                wall = time.mktime(time.strptime(day + ' ' + match[1], '%Y-%m-%d %H:%M:%S'))
+                if wall + LEGACY_SLACK < now - GRANT_WINDOW:
+                    continue
+                at = float('inf')
+            cutoff = at if cutoff is None else max(cutoff, at)
+    return cutoff
+
+
+def stale_grants(sid):
+    """Stems of this sid's grant files armed no later than its last compaction.
+
+    The consume-side check: such a grant is never handed to a guard, whatever
+    later happens to its file. Only a fresh typed grant (newer epoch) spends.
+    A file without a readable numeric epoch counts as stale.
+    """
+    cutoff = compaction_cutoff(sid)
+    if cutoff is None:
+        return set()
+    stale = set()
+    for stem in GRANT_STEMS:
+        try:
+            grant = json.loads(grant_path(stem, sid).read_text(encoding='utf-8'))
+        except FileNotFoundError:
+            continue
+        except Exception:
+            stale.add(stem)
+            continue
+        epoch = grant.get('epoch') if isinstance(grant, dict) else None
+        # Finite only: JSON can decode Infinity, which would beat any cutoff.
+        if not (isinstance(epoch, (int, float)) and not isinstance(epoch, bool)
+                and math.isfinite(epoch) and epoch >= cutoff):
+            stale.add(stem)
+    return stale
+
+
+def end_grants(sid, label):
+    """End this sid's grants: policy revoke(sid), spent tombstones for net/env/agent.
+
+    Returns (ended, failed, audited). Nothing here raises for one class's
+    failure; the caller decides what a failure means. Only observed ends are
+    reported. Other sessions' files are never touched: every path is this sid's.
+    """
+    ended, failed, audited = [], [], True
+    def note(event, detail):
+        nonlocal audited
+        try:
+            audit(sid, event, detail)
+        except Exception:
+            audited = False
+    policy = grant_path('policy', sid)
+    try:
+        present = policy.exists()
+        if present:
+            module = load('policy-prompt')
+            with contextlib.redirect_stdout(io.StringIO()):
+                module.revoke(sid)   # writes its own `unlock-revoked (policy) ... sid=` marker
+        if present and policy.exists():
+            failed.append('policy')
+        elif present:
+            ended.append('policy')
+    except Exception:
+        failed.append('policy')
+    for stem in ('net', 'env', 'agent'):
+        path = grant_path(stem, sid)
+        try:
+            if not path.exists():
+                continue
+            try:
+                current = json.loads(path.read_text(encoding='utf-8'))
+                if isinstance(current, dict) and current.get('used') is True:
+                    continue
+            except Exception:
+                pass   # unreadable: still try to overwrite it with the inert shape
+            path.write_text(json.dumps({'used': True}), encoding='utf-8')
+            ended.append(stem)
+        except Exception:
+            failed.append(stem)
+    for stem in ended:
+        note('unlock-revoked', stem + ' ' + label)
+    for stem in failed:
+        note('unlock-revoke-failed', stem)
+    return ended, failed, audited
+
+
+def compaction_tidy(sid):
+    """SessionStart `compact`: write the record, then end grants best effort.
+
+    The `startup ... compact` line is what the consume-side check reads, so it
+    is written before the tidy-up. Correctness does not depend on the tidy-up.
+    Returns the sentence for the session-start message.
+    """
+    words = []
+    try:
+        audit(sid, 'startup', 'compact', stamp=True)
+        recorded = True
+    except Exception:
+        recorded = False
+    ended, failed, audited = end_grants(sid, 'compaction')
+    if ended:
+        words.append('Ended at compaction: ' + ', '.join(ended) + '.')
+    if failed and recorded:
+        # Only a written record lets the consume-side check refuse the survivor.
+        words.append('Could not tidy the ' + ', '.join(failed) + ' grant file(s); a grant armed before this '
+                     'compaction is still refused at use.' +
+                     (' revoke-policy clears the policy file.' if 'policy' in failed else ''))
+    elif failed:
+        words.append('The compaction record and grant cleanup failed; revocation is not assured. '
+                     'Stop grant-dependent work pending fresh operator action. (Failed: ' + ', '.join(failed) + '.)')
+    elif not recorded:
+        words.append('The compaction record could not be written to the day log; no grant was left to end.'
+                     if not ended else
+                     'The compaction record could not be written to the day log; the grants above were ended.')
+    if not audited:
+        words.append('Some revocation audit lines could not be written.')
+    return (' ' + ' '.join(words)) if words else ''
+
+
+def run_guard(name, data, sid, void=()):
+    """`void` names grant stems the guard must not see (stale_grants)."""
     module = load(name)
     if name in ('net-post', 'env-global'):
         stem = 'net' if name == 'net-post' else 'env'
         module.UNLOCK = str(ROOT / '.agent-log' / (stem + '-unlock-' + sid + '.json'))
+        if stem in void:
+            # A path that never exists: the guard finds no grant to spend.
+            module.UNLOCK = str(ROOT / '.agent-log' / 'void' / (stem + '-unlock-' + sid + '.json'))
+    if name == 'policy-mutate' and 'policy' in void:
+        # policy-mutate keys its grant file on the payload's session_id; a
+        # suffixed id names a file no arm writes (and policy-mutate seals).
+        data = dict(data, session_id=sid + '-compacted')
     if name == 'policy-prompt':
         original = module.arm
         def arm(stem, ignored_sid, *args, **kwargs):
@@ -141,7 +334,7 @@ def patch_paths(command):
     return paths
 
 
-def agent_control(tool, args, sid):
+def agent_control(tool, args, sid, void=()):
     """One exact native control call, approved in a separate user prompt.
 
     The digest binds tool, target and message without putting message text in
@@ -157,14 +350,15 @@ def agent_control(tool, args, sid):
     encoded = json.dumps({'tool': tool, 'input': args}, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
     digest = hashlib.sha256(encoded.encode()).hexdigest()
     path = ROOT / '.agent-log' / ('agent-unlock-' + sid + '.json')
-    grant = load('unlock_consume').consume(str(path), match=lambda g: g.get('digest') == digest)
+    grant = None if 'agent' in void else load('unlock_consume').consume(
+        str(path), match=lambda g: g.get('digest') == digest)
     require(grant is not None,
             'agent control requires explicit approval of this exact target and input. '
             'Show the complete proposed call to the operator, then request a new prompt: auth-agent ' + digest)
     audit(sid, 'unlock-consumed', tool + ' ' + digest)
 
 
-def normalize(data, sid):
+def normalize(data, sid, void=()):
     tool, args = data.get('tool_name'), data.get('tool_input')
     require(isinstance(tool, str) and tool, 'missing tool name')
     require(isinstance(args, dict), 'tool_input must be an object')
@@ -212,7 +406,7 @@ def normalize(data, sid):
         base.update(tool_name='Agent', tool_input={'subagent_type': role})
         return [base], 'spawn'
     if tool in ('send_input', 'resume_agent', 'close_agent'):
-        agent_control(tool, args, sid)
+        agent_control(tool, args, sid, void)
         return [base], 'agent-control'
     # Only these local tools have a known non-mutating envelope. Hosted tools
     # never reach this hook and must not be called covered by this allowlist.
@@ -261,11 +455,33 @@ def handle(data):
     if event == 'SessionStart':
         source = data.get('source')
         require(source in ('startup', 'resume', 'compact', 'clear', 'fork'), 'unknown session-start source')
-        integrity = run_guard('policy-integrity', dict(base, source='resume' if source == 'compact' else 'startup'), sid)
-        audit(sid, 'startup', source)
+        if source != 'compact':
+            integrity = run_guard('policy-integrity', dict(base, source='startup'), sid)
+            audit(sid, 'startup', source)
+            tidy = ''
+        else:
+            # Integrity first, so differences made under a live grant are
+            # credited before it ends. Its failure must not skip the record.
+            failure = None
+            try:
+                integrity = run_guard('policy-integrity', dict(base, source='resume'), sid)
+            except Exception as error:
+                integrity, failure = '', error
+            tidy = compaction_tidy(sid)
+            if failure is not None:
+                raise Refusal('policy-integrity failed at compaction (' + type(failure).__name__ + '). ' + tidy)
         return ('Codex harness wired: shared guards, session grants and audit. Activation is unprobed on this client until CODEX-SETUP.md probes pass. ' +
-                integrity + ' Use $harness-grill, $harness-lane, $review-order or $closeout. '
+                integrity + tidy + ' Use $harness-grill, $harness-lane, $review-order or $closeout. '
                 'Unknown tools and approval-required scope escapes block; unified_exec must be disabled. Read docs/codex-enforcement.md.')
+    if event == 'PreCompact':
+        # Revoke first, or refuse to compact. Any failure, expected or not,
+        # reaches main() and becomes continue:false (never exit 2: the client
+        # docs do not say exit 2 blocks this event).
+        run_guard('policy-integrity', dict(base, tool_name='Write'), sid)
+        ended, failed, audited = end_grants(sid, 'pre-compact')
+        audit(sid, 'precompact', re.sub(r'[^a-z]', '', str(data.get('trigger', '')))[:16] or 'unknown')
+        require(not failed and audited, 'revocation not recorded')
+        return ''
     if event == 'PostToolUse':
         # Any successful/failed tool can have produced effects. Shared integrity
         # is observational; force a compare without trusting mutation claims.
@@ -278,7 +494,9 @@ def handle(data):
         return integrity
     require(event == 'PreToolUse', 'unsupported hook event')
     try:
-        calls, kind = normalize(data, sid)
+        # Consume-side check, before any guard that can spend a grant.
+        void = stale_grants(sid)
+        calls, kind = normalize(data, sid, void)
         notices = []
         # Scope first prevents spending a policy/network grant on a blocked escape.
         for call in calls:
@@ -289,10 +507,10 @@ def handle(data):
                 run_guard('git-guard', call, sid)
         for call in calls:
             if kind in ('file', 'patch', 'shell'):
-                run_guard('policy-mutate', call, sid)
+                run_guard('policy-mutate', call, sid, void)
             if kind == 'shell':
-                run_guard('net-post', call, sid)
-                notice = run_guard('env-global', call, sid)
+                run_guard('net-post', call, sid, void)
+                notice = run_guard('env-global', call, sid, void)
                 if notice:
                     notices.append(notice)
             if kind == 'spawn':
@@ -317,6 +535,9 @@ def main():
                 print(json.dumps({'hookSpecificOutput': {'hookEventName': event, 'additionalContext': context}}))
     except Exception as error:
         reason = str(error) if isinstance(error, Refusal) else 'adapter failure: ' + type(error).__name__
+        if event == 'PreCompact':
+            print(json.dumps({'continue': False, 'stopReason': COMPACT_REFUSED}))
+            return 0
         if event == 'PreToolUse' or event is None:
             print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PreToolUse',
                   'permissionDecision': 'deny', 'permissionDecisionReason': 'codex-harness: ' + reason}}))

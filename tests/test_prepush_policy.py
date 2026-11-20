@@ -56,10 +56,13 @@ class PrePushDefaultBranch(unittest.TestCase):
         env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
         if agent:
             env["CLAUDECODE"] = "1"
+        # Bytes, not text: text mode on Windows writes "\r\n", the fourth field
+        # becomes 41 characters and every push read as "malformed pre-push
+        # input". git itself writes "\n" on every host.
         r = subprocess.run(["sh", str(self.hook), "origin", URL], cwd=str(self.repo),
-                           input="%s refs/heads/%s %s\n" % (local, branch, self.c1),
-                           capture_output=True, text=True, env=env)
-        return r.returncode, r.stderr.strip()
+                           input=("%s refs/heads/%s %s\n" % (local, branch, self.c1)).encode(),
+                           capture_output=True, env=env)
+        return r.returncode, r.stderr.decode("utf-8", "replace").strip()
 
     def test_human_push_to_the_default_branch_is_allowed(self):
         self.set_default("build-1")

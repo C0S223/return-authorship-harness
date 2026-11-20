@@ -140,18 +140,24 @@ PRODUCERS = (
 PEER_CLASS = "peer-"
 _produced = None
 
-# What the cloud advisory must say (root CLAUDE.md section 3: lane branch
-# only, no draft PR), and the host advisory as shipped -- pinned whole,
-# counts aside, so a cloud sentence leaking to the host or any rewording of the
-# host text fails.
-CLOUD_CLOSE = ("CLAUDE.md section 3", "pushes the lane branch only",
-               "PR needs task approval", "default branch stays human")
+# Both advisories state root CLAUDE.md section 3's close rule (the closeout
+# pushes the session's own non-default branches, never the default branch, no
+# PR) and are pinned whole, counts and boundary name aside, so a cloud sentence
+# leaking to the host, a host sentence leaking to the cloud, or any rewording
+# that adds a PR obligation fails.
+_TAIL = (" What drains this is the closeout: "
+         "surface /closeout, contract .claude/skills/closeout/SKILL.md. The "
+         "OPERATOR's word fires it — this warning does not, so do not run "
+         "it unprompted. Fires once per session.")
+CLOUD_REASON = ("session-close: stranded work — {} dirty file(s), {} unpushed "
+                "commit(s). Close on this {} cloud boundary follows CLAUDE.md "
+                "section 3: the closeout commits topically; /closeout authorizes "
+                "pushing the session's own non-default branches, never the default "
+                "branch, and opens no PR." + _TAIL)
 HOST_REASON = ("session-close: stranded work — {} dirty file(s), {} unpushed "
-               "commit(s). Close is propose-and-stop: commit topically, present the "
-               "push list; the human executes. What drains this is the closeout: "
-               "surface /closeout, contract .claude/skills/closeout/SKILL.md. The "
-               "OPERATOR's word fires it — this warning does not, so do not run "
-               "it unprompted. Fires once per session.")
+               "commit(s). Close: commit topically; the operator's /closeout authorizes "
+               "pushing the session's own non-default branches, never the default "
+               "branch, no PR." + _TAIL)
 
 
 def missing_dependency():
@@ -586,6 +592,256 @@ class SessionCloseCase(unittest.TestCase):
         self.assertTrue(out.strip(), "one commit ahead of origin/main raised no advisory")
         self.assertIn("0 dirty file(s), 1 unpushed commit(s)", json.loads(out)["reason"])
 
+    # -- ignored child checkouts still hold stranded work ----------------
+    def child_git(self, repo, *args):
+        result = subprocess.run(
+            ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t",
+             "-c", "commit.gpgsign=false",
+             *args], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result
+
+    def clean_harness_for_children(self):
+        (self.root / ".gitignore").write_text(".agent-log/\nrepos/\n", encoding="utf-8")
+        self.child_git(self.root, "add", "-A")
+        self.child_git(self.root, "commit", "-qm", "harness base")
+
+    def make_child(self, name, ahead=False):
+        child = self.root / "repos" / name
+        child.mkdir(parents=True)
+        self.child_git(child, "init", "-q")
+        self.child_git(child, "commit", "-q", "--allow-empty", "-m", "child base")
+        if ahead:
+            # Different from the harness default, with no remote/network needed.
+            self.child_git(child, "update-ref", "refs/remotes/origin/child-default", "HEAD")
+            self.child_git(child, "symbolic-ref", "refs/remotes/origin/HEAD",
+                           "refs/remotes/origin/child-default")
+            self.child_git(child, "commit", "-q", "--allow-empty", "-m", "child ahead")
+        return child
+
+    def child_warning(self):
+        result = self.turn_end(markers={}, closeout=False)
+        self.assertEqual(result.stderr, "")
+        self.assertTrue(result.stdout.strip(), "stranded child work raised no advisory")
+        advisory = json.loads(result.stdout)
+        self.assertEqual(advisory["decision"], "block")
+        return advisory["reason"]
+
+    def test_child_dirty_triggers_named_warning(self):
+        self.clean_harness_for_children()
+        child = self.make_child("dirty child")
+        (child / "pending.txt").write_text("pending\n", encoding="utf-8")
+        reason = self.child_warning()
+        self.assertIn("1 dirty file(s), 0 unpushed commit(s)", reason)
+        self.assertIn("repos/dirty child: 1 dirty, 0 unpushed", reason)
+        self.assertEqual(self.turn_end(markers={}, closeout=False).stdout, "")
+
+    def test_unignored_repos_dir_is_not_counted_as_harness_dirt(self):
+        # No repos/ line in .gitignore: the harness count must still skip it,
+        # so one modified child file reads as one dirty file, not two.
+        (self.root / ".gitignore").write_text(".agent-log/\n", encoding="utf-8")
+        self.child_git(self.root, "add", "-A")
+        self.child_git(self.root, "commit", "-qm", "harness base")
+        child = self.make_child("unignored")
+        (child / "pending.txt").write_text("pending\n", encoding="utf-8")
+        reason = self.child_warning()
+        self.assertIn("1 dirty file(s), 0 unpushed commit(s)", reason)
+        self.assertIn("repos/unignored: 1 dirty, 0 unpushed", reason)
+
+    def test_child_unpushed_triggers_named_warning(self):
+        self.clean_harness_for_children()
+        self.make_child("ahead", ahead=True)
+        reason = self.child_warning()
+        self.assertIn("0 dirty file(s), 1 unpushed commit(s)", reason)
+        self.assertIn("repos/ahead: 0 dirty, 1 unpushed", reason)
+
+    def test_child_clean_with_clean_harness_stays_silent(self):
+        self.clean_harness_for_children()
+        self.make_child("clean")
+        result = self.turn_end(markers={}, closeout=False)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(result.stderr, "")
+        self.assertFalse(self.latched())
+
+    def test_child_non_git_directory_is_ignored(self):
+        self.clean_harness_for_children()
+        ordinary = self.root / "repos" / "ordinary"
+        ordinary.mkdir(parents=True)
+        (ordinary / "notes.txt").write_text("not a checkout\n", encoding="utf-8")
+        self.assertEqual(self.turn_end(markers={}, closeout=False).stdout, "")
+        self.assertFalse(self.latched())
+        # Git discovery here would walk up to the harness and double-count it.
+        (self.root / "stranded.txt").write_text("changed\n", encoding="utf-8")
+        reason = self.child_warning()
+        self.assertIn("1 dirty file(s), 0 unpushed commit(s)", reason)
+        self.assertNotIn("repos/ordinary", reason)
+
+    def test_child_counts_add_to_harness_and_other_children(self):
+        self.clean_harness_for_children()
+        first = self.make_child("first", ahead=True)
+        (first / "one.txt").write_text("one\n", encoding="utf-8")
+        second = self.make_child("second")
+        (second / "two.txt").write_text("two\n", encoding="utf-8")
+        self.make_child("clean")
+        (self.root / "stranded.txt").write_text("changed\n", encoding="utf-8")
+        reason = self.child_warning()
+        self.assertIn("3 dirty file(s), 1 unpushed commit(s)", reason)
+        self.assertIn("repos/first: 1 dirty, 1 unpushed", reason)
+        self.assertIn("repos/second: 1 dirty, 0 unpushed", reason)
+        self.assertNotIn("repos/clean", reason)
+
+    def test_child_failed_git_does_not_hide_healthy_child(self):
+        self.clean_harness_for_children()
+        broken = self.root / "repos" / "a-broken"
+        broken.mkdir(parents=True)
+        (broken / ".git").write_text("gitdir: missing\n", encoding="utf-8")
+        child = self.make_child("z-healthy")
+        (child / "pending.txt").write_text("pending\n", encoding="utf-8")
+        reason = self.child_warning()
+        self.assertIn("1 dirty file(s), 0 unpushed commit(s)", reason)
+        self.assertIn("repos/z-healthy: 1 dirty, 0 unpushed", reason)
+        self.assertNotIn("repos/a-broken", reason)
+
+    def test_unreadable_child_alone_raises_its_own_notice(self):
+        self.clean_harness_for_children()
+        child = self.make_child("broken")
+        (child / ".git" / "index").write_bytes(b"not a git index")
+        reason = self.child_warning()
+        self.assertIn("git status failed in repos/broken", reason)
+        self.assertNotIn("stranded work —", reason)
+        self.assertNotIn("/closeout", reason)
+        # once per session: a second quiet turn stays silent
+        again = self.turn_end(markers={}, closeout=False)
+        self.assertEqual(again.stdout.strip(), "")
+
+    def test_unreadable_notice_does_not_spend_the_stranded_latch(self):
+        # an unreadable-only turn must not silence a later
+        # turn that does strand work in the same session.
+        self.clean_harness_for_children()
+        child = self.make_child("broken")
+        (child / ".git" / "index").write_bytes(b"not a git index")
+        self.assertIn("git status failed in repos/broken", self.child_warning())
+        (self.root / "harness-pending.txt").write_text("pending\n", encoding="utf-8")
+        reason = self.child_warning()
+        self.assertIn("stranded work — 1 dirty file(s), 0 unpushed commit(s)", reason)
+        self.assertIn("repos/broken: unreadable", reason)
+        third = self.turn_end(markers={}, closeout=False)
+        self.assertEqual(third.stdout.strip(), "")
+
+    def test_unreadable_child_preserves_healthy_sibling_counts(self):
+        self.clean_harness_for_children()
+        broken = self.make_child("a-broken")
+        (broken / ".git" / "index").write_bytes(b"not a git index")
+        healthy = self.make_child("z-healthy", ahead=True)
+        (healthy / "pending.txt").write_text("pending\n", encoding="utf-8")
+        reason = self.child_warning()
+        self.assertIn("1 dirty file(s), 1 unpushed commit(s)", reason)
+        self.assertIn("repos/a-broken: unreadable", reason)
+        self.assertIn("repos/z-healthy: 1 dirty, 1 unpushed", reason)
+
+    def test_child_empty_git_directory_does_not_count_harness(self):
+        self.clean_harness_for_children()
+        (self.root / "harness-pending.txt").write_text("pending\n", encoding="utf-8")
+        (self.root / "repos" / "x" / ".git").mkdir(parents=True)
+        reason = self.child_warning()
+        self.assertIn("1 dirty file(s), 0 unpushed commit(s)", reason)
+        self.assertNotIn("repos/x", reason)
+
+    def symlink_child(self, name, target):
+        link = self.root / "repos" / name
+        link.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.symlink(target, link, target_is_directory=True)
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest("symlinks unavailable: %s" % exc)
+        return link
+
+    def test_symlinked_child_empty_git_does_not_count_harness(self):
+        # The bound must apply where git actually runs: a symlinked child
+        # resolves outside repos/, so a lexical ceiling would not stop it.
+        (self.root / ".gitignore").write_text(".agent-log/\nrepos/\nvendor/\n", encoding="utf-8")
+        self.child_git(self.root, "add", "-A")
+        self.child_git(self.root, "commit", "-qm", "harness base")
+        (self.root / "harness-pending.txt").write_text("pending\n", encoding="utf-8")
+        (self.root / "vendor" / "thing" / ".git").mkdir(parents=True)
+        self.symlink_child("thing", self.root / "vendor" / "thing")
+        reason = self.child_warning()
+        self.assertIn("1 dirty file(s), 0 unpushed commit(s)", reason)
+        self.assertNotIn("repos/thing", reason)
+
+    def test_symlinked_child_checkout_still_counts(self):
+        self.clean_harness_for_children()
+        real = self.make_child("real")
+        (real / "pending.txt").write_text("pending\n", encoding="utf-8")
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, outside, ignore_errors=True)
+        target = outside / "linked"
+        target.mkdir()
+        self.child_git(target, "init", "-q")
+        self.child_git(target, "commit", "-q", "--allow-empty", "-m", "linked base")
+        (target / "pending.txt").write_text("pending\n", encoding="utf-8")
+        self.symlink_child("linked", target)
+        reason = self.child_warning()
+        self.assertIn("2 dirty file(s), 0 unpushed commit(s)", reason)
+        self.assertIn("repos/linked: 1 dirty, 0 unpushed", reason)
+        self.assertIn("repos/real: 1 dirty, 0 unpushed", reason)
+
+    @unittest.skipIf(os.name == "nt", "':' is not a legal file-name character on Windows, "
+                     "so a root holding one cannot exist there")
+    def test_colon_in_root_empty_git_child_does_not_count_harness(self):
+        # GIT_CEILING_DIRECTORIES is a ':'-separated list, so a ':' in ROOT split
+        # the bound into entries git ignored and the harness was counted again.
+        outer = self.root
+        self.root = outer / "a:b"
+        self.root.mkdir()
+        (self.root / ".agent-log").mkdir()
+        (self.root / "scripts").mkdir()
+        shutil.copy(REPO / "scripts" / "log_filter.py", self.root / "scripts" / "log_filter.py")
+        subprocess.run(["git", "init", "-q", self.root.as_posix()],
+                       capture_output=True, check=True)
+        self.install(HOOK_SRC)
+        self.clean_harness_for_children()
+        (self.root / "harness-pending.txt").write_text("pending\n", encoding="utf-8")
+        (self.root / "repos" / "x" / ".git").mkdir(parents=True)
+        reason = self.child_warning()
+        self.assertIn("1 dirty file(s), 0 unpushed commit(s)", reason)
+        self.assertNotIn("repos/x", reason)
+
+    def test_child_garbage_head_does_not_hide_healthy_siblings(self):
+        self.clean_harness_for_children()
+        for name in ("a-healthy", "z-healthy"):
+            child = self.make_child(name, ahead=True)
+            (child / "pending.txt").write_text("pending\n", encoding="utf-8")
+        broken = self.make_child("m-broken")
+        (broken / ".git" / "HEAD").write_text("garbage\n", encoding="utf-8")
+        (self.root / "harness-pending.txt").write_text("pending\n", encoding="utf-8")
+        reason = self.child_warning()
+        self.assertIn("3 dirty file(s), 2 unpushed commit(s)", reason)
+        for name in ("a-healthy", "z-healthy"):
+            self.assertIn("repos/%s: 1 dirty, 1 unpushed" % name, reason)
+        self.assertNotIn("repos/m-broken", reason)
+
+    def test_child_quiet_stop_does_not_refresh_index(self):
+        self.clean_harness_for_children()
+        child = self.make_child("clean")
+        tracked = child / "tracked.txt"
+        tracked.write_text("unchanged\n", encoding="utf-8")
+        self.child_git(child, "add", "tracked.txt")
+        self.child_git(child, "commit", "-qm", "tracked file")
+        # Stale cached stat data forces status to refresh the index unless
+        # optional writes are disabled, even though the file is still clean.
+        os.utime(tracked, ns=(1_000_000_000, 1_000_000_000))
+        index = child / ".git" / "index"
+        os.utime(index, ns=(2_000_000_000, 2_000_000_000))
+        before = index.stat().st_mtime_ns
+        contents = index.read_bytes()
+        result = self.turn_end(markers={}, closeout=False)
+        self.assertEqual(result.stdout, "")
+        self.assertEqual(result.stderr, "")
+        self.assertFalse(self.latched())
+        self.assertEqual(index.stat().st_mtime_ns, before)
+        self.assertEqual(index.read_bytes(), contents)
+
     # -- the block is cloud-only -----------------------------------------
     def test_a_non_cloud_target_writes_no_survivor(self):
         r = self.turn_end(markers={})
@@ -602,6 +858,55 @@ class SessionCloseCase(unittest.TestCase):
         self.assertTrue(names, "the selfhost branch of the cloud guard wrote no "
                                "survivor at all")
         self.assertTrue(names[0].endswith("-session-close-selfhost.md"), names)
+
+    # -- the closeout's in-turn copy (--copy-only) -------------------------
+    def copy_only(self, markers, *args):
+        env = dict(CLEAN_ENV)
+        env.update(markers)
+        r = subprocess.run(["bash", self.hook.as_posix(), "--copy-only", *args],
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                           encoding="utf-8", env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r
+
+    def test_copy_only_writes_the_survivor_inside_the_closeout_turn(self):
+        """CLAUDE.md section 4: a cloud close commits the audit copy in the
+        closeout turn, then pushes. The Stop hook writes it only at turn end,
+        after any push, so the closeout runs --copy-only itself. In a fake cloud
+        checkout (a git repo, CLAUDE_CODE_REMOTE=true, the closeout flag set)
+        it must write handoffs/auto/ content now, name that path on stdout so
+        the closeout stages exactly it, leave the path committable, and do
+        nothing else: no latch, no advisory."""
+        rows = [r for r in fixtures() if r[2]]
+        self.write_daylog([line for _, line, _, _ in rows])
+        (self.root / ".agent-log" / "closeout-requested").touch()
+        r = self.copy_only({"CLAUDE_CODE_REMOTE": "true"}, "sess-inturn")
+        out = Path(r.stdout.strip())
+        self.assertEqual(out.parent, self.root / "handoffs" / "auto", r.stdout)
+        self.assertTrue(out.name.endswith("-sess-inturn-session-close-managed.md"), out)
+        text = out.read_text(encoding="utf-8")
+        for cls, line, _, why in rows:
+            self.assertIn(line, text, "%s (%s) missing from the in-turn copy" % (cls, why))
+        self.assertNotIn('"decision"', r.stdout, "--copy-only emitted the advisory")
+        self.assertFalse(self.latched(), "--copy-only wrote the advisory latch")
+        st = subprocess.run(["git", "-C", self.root.as_posix(), "status", "--porcelain",
+                             "--", "handoffs/auto"], capture_output=True, text=True)
+        self.assertIn("handoffs/", st.stdout, "the in-turn copy is not committable")
+
+    def test_copy_only_keeps_the_cloud_and_flag_guards(self):
+        self.write_daylog(["- 10:00:00 [policy-integrity] first"])
+        flag = self.root / ".agent-log" / "closeout-requested"
+        for name, markers, flagged in (("host", {}, True),
+                                       ("cloud, no flag", {"CLAUDE_CODE_REMOTE": "true"}, False)):
+            with self.subTest(case=name):
+                if flagged:
+                    flag.touch()
+                elif flag.exists():
+                    flag.unlink()
+                r = self.copy_only(markers, "sess-guard")
+                self.assertEqual(r.stdout.strip(), "")
+                self.assertEqual(self.survivors(), [], "%s: --copy-only wrote a survivor" % name)
+                self.assertIn("nothing copied", r.stderr)
 
     # -- local date, close rule, F2 marker predicate -----------------------
     def test_the_cloud_copy_reads_the_local_date_day_log(self):
@@ -627,21 +932,22 @@ class SessionCloseCase(unittest.TestCase):
                       "local-date day log" % (tz, local, utc))
 
     def test_a_cloud_boundary_states_the_adr_0027_close_rule(self):
-        """On managed and selfhost the host sentence "the human
-        executes" is the opposite of the rule the gate design set."""
+        """On managed and selfhost the advisory states CLAUDE.md section 3's
+        close rule naming its boundary, byte for byte apart from the two counts
+        and the boundary name, so a variant that adds a PR obligation fails."""
         for name, markers in (("managed", {"CLAUDE_CODE_REMOTE": "true"}),
                               ("selfhost", {"HARNESS_BOUNDARY": "selfhost"})):
             with self.subTest(boundary=name):
                 self.session = "sess-close-" + name    # one latch per boundary
                 reason = json.loads(self.turn_end(markers=markers).stdout)["reason"]
-                for phrase in CLOUD_CLOSE:
-                    self.assertIn(phrase, reason)
-                self.assertNotIn("the human executes", reason)
-                self.assertNotIn("opens a draft PR", reason)
+                m = re.match(r"session-close: stranded work — (\d+) dirty file\(s\), "
+                             r"(\d+) unpushed", reason)
+                self.assertTrue(m, reason)
+                self.assertEqual(reason, CLOUD_REASON.format(*m.groups(), name))
 
     def test_the_host_advisory_is_the_shipped_text(self):
-        """The other half of the close rule: the host keeps propose-and-stop, byte for
-        byte apart from the two counts."""
+        """The host half of the close rule: the same section 3 rule without a
+        boundary name, byte for byte apart from the two counts."""
         reason = json.loads(self.turn_end(markers={}).stdout)["reason"]
         m = re.match(r"session-close: stranded work — (\d+) dirty file\(s\), "
                      r"(\d+) unpushed", reason)

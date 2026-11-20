@@ -30,7 +30,9 @@ review's first three lines are:
 
 then one blank line, then `VERDICT: ACCEPT` or `VERDICT: REFUSE` as below, unchanged.
 `STAMP` is `APPROVE` iff `VERDICT: ACCEPT` with zero open merge-blocking conditions;
-anything else is `BLOCK`. `REVISION` is the sha the caller supplied, which must be the full
+anything else is `BLOCK`. The `BLOCK-KIND` header is `senior-engineer` only: this role runs
+nothing, so it cannot be refused execution, and the field in your header block, or at column 0 of any line of your body, fails the gate; name it only mid-sentence or indented.
+`REVISION` is the sha the caller supplied, which must be the full
 40 hex: you cannot expand an abbreviation, so an order that gives only one is refused like
 an order that gives none. `scripts/stamp_check.py` parses these lines verbatim, and CI runs
 the default branch's copy of it as check (b) inside `gate` on every PR (`.github/workflows/ci.yml`): a

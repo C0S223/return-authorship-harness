@@ -123,7 +123,9 @@ def check_shim(shim, work):
         for args in cases:
             with open(f, "w", encoding="utf-8", newline="\n") as fh:
                 fh.write("x\n")
-            r = subprocess.run([os.path.join(shim, "sed")] + args + [f],
+            # Through sh, not by its shebang: Windows cannot exec a script
+            # directly (WinError 193).
+            r = subprocess.run(["sh", os.path.join(shim, "sed")] + args + [f],
                                stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             was_refused = r.returncode == 2 and b"strict sed:" in r.stderr
             with open(f, encoding="utf-8") as fh:

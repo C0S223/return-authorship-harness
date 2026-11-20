@@ -27,10 +27,13 @@ FLAGGED = [
     ".claude/hooks/x.py",
     ".claude/agents/x.md",
     ".git/config",
+    ".claude/skills/new-zz/SKILL.md",  # exists nowhere: is_skill
+    ".Claude/Skills/new-zz/x.md",      # folded
 ]
 NOT_FLAGGED = [
     "projects/app/handler.py",
     "scripts/does_not_exist_zz.py",  # new file under scripts/: not a policy path
+    ".claude/skills-notes.md",       # a sibling of .claude/skills/
 ]
 
 got = flags(FLAGGED + NOT_FLAGGED)

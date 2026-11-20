@@ -13,8 +13,9 @@ and discovery files; it does not inspect effective client settings or mark them 
 
 The incident behind this addition is the Codex gap: the original hook registration,
 Claude tool envelopes and Claude-only discovery paths did not reach Codex. The
-transport budget is one ordered dispatcher and one launcher, registered for five
-native events: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse and Stop.
+transport budget is one ordered dispatcher and one launcher, registered for six
+native events: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop and
+PreCompact (added for the compaction grant revoke).
 No shell text classifier or existing hook is replaced. The shared contract budget
 remains 15,000 bytes; this detailed matrix is outside the always-loaded contract.
 
@@ -25,7 +26,7 @@ remains 15,000 bytes; this detailed matrix is outside the always-loaded contract
 | Shell checks | Existing policy-mutate, shell-scope, git-guard, net-post and env-global | Direct-envelope tests; client activation unprobed; frozen text classifiers retain their gaps |
 | Patch/file writes | Entire patch grammar parsed before scope and policy checks on every path, including move targets | Unknown shapes block; deletion patches block for operator recoverability review |
 | Approval-required scope | Shared `ask` becomes explicit `deny` with explanation | No broad grant, sandbox change or automatic escalation; operator performs outside-scope action |
-| Policy grants | Original prompt grammar and task lifetime, keyed by a hash of the Codex session id | Agent-writable local state; no hardened authorship proof |
+| Policy grants | Original prompt grammar and task lifetime, keyed by a hash of the Codex session id | Agent-writable local state; no hardened authorship proof; compaction revoke (PreCompact, SessionStart `compact`, consume-side epoch check) is **wired, unprobed**, with residuals (a)-(c) open and not risk-accepted (see the PreCompact paragraph below) |
 | Net/env grants | Existing one-shot consumers rebound to session-keyed files | No cross-session consumption; global Claude grant files are not used |
 | Roster | Existing roster predicate plus native `agent_type` and required custom TOML | Default/fallback agents refuse; bindings inherit parent permissions; ask before every spawn until roster probe is live |
 | Denied tools | Shared tool-name deny patterns; unmapped local tools refuse | Hosted tools do not traverse this hook path; Claude Bash argument-pattern settings are not a Codex shell classifier |
@@ -88,6 +89,18 @@ still need real client probes: not every runtime hook failure is guaranteed to b
 Post-tool integrity alerts cannot undo an effect. No fixture test proves the runtime
 will invoke or obey the hook. If a live probe proceeds unexpectedly, stop and report
 that surface as unverified; do not compensate by adding a shell text pattern.
+
+PreCompact failures are the one exception to the exit-2 path: once the payload
+parses, any failure or unexpected exception prints `{"continue": false, "stopReason": …}`
+with exit 0. An unparseable payload names no event, so it gets the PreToolUse-shaped
+deny output, which the client may not read as a refusal (residual (a)). This is
+because the client docs say `continue: false` stops compaction and do not say exit 2
+does. Whether the client honours it is unprobed on `codex-cli 0.163.0`. Compaction
+residuals stay open, not risk-accepted: (a) a hook crash, timeout or launcher exit 2
+the client treats as non-blocking; (b) a compaction route that skips PreCompact;
+(c) an auto-compaction refused at context overflow may stall the session. Clients without
+the `PreCompact` event (older installs) are unchecked; verify how
+they handle the new key before they use this checkout.
 
 ## Native workflow substitutions
 
