@@ -26,6 +26,18 @@ HOOK = Path(os.environ.get("LOG_ESCAPE_HOOK")
 PUSH = '"tool_input":{"command":"git push origin lane"}'
 
 
+def link_or_skip(case, link, target):
+    """Symlink `link` to `target`, or skip `case` where symlinks cannot be made.
+
+    Windows refuses symlinks without Developer Mode or admin rights (WinError
+    1314); turning that on is the operator's act, so the case skips with the
+    reason rather than failing."""
+    try:
+        link.symlink_to(target)
+    except OSError as exc:
+        case.skipTest("cannot create symlinks here: %s" % exc)
+
+
 class LogEscapeCase(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp(prefix="logescape-root-"))
@@ -61,7 +73,7 @@ class LogEscapeCase(unittest.TestCase):
         for tool in ("bash", "mkdir", "tr", "sed", "cat", "date", "python", "python3"):
             found = shutil.which(tool)
             if found:
-                (bin_dir / tool).symlink_to(found)
+                link_or_skip(self, bin_dir / tool, found)
         env = dict(self.env, PATH=str(bin_dir))
         # F25 (review SE-5): a real payload's command starts past byte 160.
         lead = ('"session_id":"%s","transcript_path":"/root/.claude/projects/%s.jsonl",'
@@ -329,8 +341,8 @@ class OnlyPython3OnPath(unittest.TestCase):
         for tool in ("bash", "mkdir", "tr", "sed", "cat", "date", "jq"):
             found = shutil.which(tool)
             if found:
-                (bin_dir / tool).symlink_to(found)
-        (bin_dir / "python3").symlink_to(sys.executable)
+                link_or_skip(self, bin_dir / tool, found)
+        link_or_skip(self, bin_dir / "python3", sys.executable)
         self.assertIsNone(shutil.which("python", path=str(bin_dir)))
         r = subprocess.run(["bash", self.hook.as_posix()], input=json.dumps(payload),
                            capture_output=True, text=True, env=self.host_env(bin_dir))
@@ -371,8 +383,8 @@ class OnlyPython3OnPath(unittest.TestCase):
         bin_dir = self.root / "py3only-bin"
         bin_dir.mkdir()
         for tool in ("bash", "tr", "sed", "jq"):
-            (bin_dir / tool).symlink_to(shutil.which(tool))
-        (bin_dir / "python3").symlink_to(sys.executable)
+            link_or_skip(self, bin_dir / tool, shutil.which(tool))
+        link_or_skip(self, bin_dir / "python3", sys.executable)
         fast = self.root / ".claude" / "hooks" / "log-escape-fast.sh"
         r = subprocess.run(
             ["bash", "-c", 'ROOT="$2"; TOOL=Edit; FAST=""; . "$1"; '
@@ -396,7 +408,7 @@ class OnlyPython3OnPath(unittest.TestCase):
         (self.root / "py3only-bin").mkdir()
         bin_dir = self.root / "py3only-bin"
         for tool in ("bash", "mkdir", "tr", "sed", "cat", "date", "jq"):
-            (bin_dir / tool).symlink_to(shutil.which(tool))
+            link_or_skip(self, bin_dir / tool, shutil.which(tool))
         for payload in (self.shell_write(), self.file_write()):
             with self.subTest(tool=payload["tool_name"]):
                 r = subprocess.run(["bash", self.hook.as_posix()], input=json.dumps(payload),

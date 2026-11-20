@@ -71,7 +71,7 @@ lane's desk are the record. With a connector, every step runs as written.
 5. **Close.** Report the forks drained, lanes still open with their frozen units, work
    orders left for fresh sessions, policy-path PRs awaiting the operator's merge, and commands handed
    to the operator such as bare-directory deletes (§2). The close itself is on the operator's word only:
-   `/closeout`, then the handoff; the Stop hook warns and never fires it.
+   `/closeout` (it writes a handoff file only in its no-connector fallback); the Stop hook warns and never fires it.
 
 ## Hazards
 

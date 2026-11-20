@@ -21,7 +21,7 @@ def main():
     assert ci.flagged(paths, checker) == paths, 'Codex policy escaped operator review'
     assert (ROOT / 'AGENTS.md').read_bytes() == (ROOT / 'CLAUDE.md').read_bytes()
     original = subprocess.run(['git', '-C', str(ROOT), 'show',
-                              'f19559a78a499312d979e489a26a078ea54b254e'],
+                              '0ae5e6f1bafeb3272a6e8349cae6e8de74e968c4'],
                              capture_output=True)
     # The pin is CLAUDE.md's blob (`git hash-object CLAUDE.md`), stable
     # whatever the merge method. Template clones need not retain this object. Where
@@ -53,7 +53,7 @@ def main():
         front = text.split('---', 2)[1]
         assert 'name: ' + name in front and 'description:' in front
     hooks = json.loads((ROOT / '.codex/hooks.json').read_text())['hooks']
-    assert set(hooks) == {'SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop'}
+    assert set(hooks) == {'SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop', 'PreCompact'}
     for groups in hooks.values():
         assert len(groups) == 1 and len(groups[0]['hooks']) == 1, 'ordered checks need one dispatcher'
         hook = groups[0]['hooks'][0]

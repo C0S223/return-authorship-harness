@@ -30,11 +30,40 @@ DIRTY="$(git -C "$ROOT" status --porcelain 2>/dev/null | wc -l | tr -d '[:space:
 # The default branch is origin/HEAD's target, never a guessed name, and only
 # when that target is under origin and names a commit: the gates treat any
 # other state as unresolved, so this line does too.
-REF="$(git -C "$ROOT" symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null || true)"
-DEFAULT=""
-case "$REF" in
-  refs/remotes/origin/?*) git -C "$ROOT" rev-parse -q --verify "$REF^{commit}" >/dev/null 2>&1 && DEFAULT="${REF#refs/remotes/origin/}" || true ;;
-esac
+read_default() {
+  REF="$(git -C "$ROOT" symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null || true)"
+  DEFAULT=""
+  case "$REF" in
+    refs/remotes/origin/?*) git -C "$ROOT" rev-parse -q --verify "$REF^{commit}" >/dev/null 2>&1 && DEFAULT="${REF#refs/remotes/origin/}" || true ;;
+  esac
+}
+read_default
+# SessionStart hooks run in parallel. In managed cloud,
+# policy-integrity.py's startup sets an unset origin/HEAD (set_origin_head) and
+# only then writes this session's baseline, so a read taken before that is
+# stale. There, at startup or resume with origin/HEAD unresolved, wait for that
+# baseline (at most 6 s, under the 10 s hook timeout), then read origin/HEAD
+# again. The session id and source come from this hook's stdin JSON; the id is
+# cut to policy-integrity's own [A-Za-z0-9_-] so both name the same file. No
+# input, a terminal, another source or no id: no wait. Ordering only; this
+# decides no gate, and a missed field costs the stale line, nothing more.
+if [ -n "$GIT_OK" ] && [ -z "$DEFAULT" ] && [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] && [ ! -t 0 ]; then
+  IN=""
+  IFS= read -r -t 1 -d '' IN || true
+  SID=""
+  SRC=""
+  [[ "$IN" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]] && SID="${BASH_REMATCH[1]//[^A-Za-z0-9_-]/}" || true
+  [[ "$IN" =~ \"source\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]] && SRC="${BASH_REMATCH[1]}" || true
+  case "$SRC" in
+    startup|resume)
+      if [ -n "$SID" ]; then
+        BASE="$ROOT/.agent-log/policy-baseline-unlock-$SID.json"
+        N=0
+        while [ ! -e "$BASE" ] && [ "$N" -lt 30 ]; do sleep 0.2 || true; N=$((N + 1)); done
+        read_default
+      fi ;;
+  esac
+fi
 [ -n "$GIT_OK" ] && [ -z "$DEFAULT" ] && echo "session-start: this checkout is on '$BRANCH'; origin's default branch is unknown (refs/remotes/origin/HEAD unset or dangling), so the gates refuse pushes. The human runs: git remote set-head origin --auto"
 [ -n "$GIT_OK" ] && [ -n "$DEFAULT" ] && [ "$BRANCH" != "$DEFAULT" ] && echo "session-start: this checkout is on '$BRANCH', not the default branch '$DEFAULT'."
 [ -n "$GIT_OK" ] && [ -n "$DEFAULT" ] && [ "$BRANCH" = "$DEFAULT" ] && echo "session-start: this checkout is on the default branch '$DEFAULT'. §3 — in a shared tree on the default branch, a commit IS a push for gating purposes. Isolate before shared-file work: git worktree add --no-track worktrees/<n> -b <branch> origin/$DEFAULT. Advisory only; nothing enforces this."

@@ -1,10 +1,12 @@
 """session-start.sh's branch line names origin/HEAD's target, never a guessed
 `master`. Each case runs the real hook with CLAUDE_PROJECT_DIR at a temp repo.
 """
+import json
 import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -319,7 +321,7 @@ class SessionStartSharedMarker(unittest.TestCase):
 
 ORIGIN_CLAIMS = ("unset or dangling", "git remote set-head")
 # The commands session-start.sh runs besides git and shell builtins.
-HOOK_TOOLS = ("wc", "tr", "grep", "tail", "date", "dirname")
+HOOK_TOOLS = ("wc", "tr", "grep", "tail", "date", "dirname", "sleep")
 
 
 @unittest.skipUnless(shutil.which("bash") and shutil.which("git"), "needs bash and git")
@@ -426,6 +428,126 @@ class SessionStartNoOriginClaimWithoutGit(unittest.TestCase):
         for name, target in variants:
             with self.subTest(name):
                 self.assert_no_origin_claim_and_tail(self.run_hook(linked, self.bin_dir(target)))
+
+
+SID = "sid-race"
+UNKNOWN = "default branch is unknown"
+PI = ROOT / ".claude" / "hooks" / "policy-integrity.py"
+RUN_PY = ROOT / ".claude" / "hooks" / "run-python.sh"
+
+
+@unittest.skipUnless(shutil.which("bash") and shutil.which("git"), "needs bash and git")
+class SessionStartAfterPolicyIntegrity(unittest.TestCase):
+    """SessionStart hooks run in parallel, and in managed cloud
+    policy-integrity.py sets an unset origin/HEAD and only then writes this
+    session's baseline. The `unknown` line must describe origin/HEAD after that
+    attempt, not before it. Fixture as scripts/test_policy_integrity.py's
+    with_origin: a clone of a local bare origin, its origin/HEAD removed."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="session-start-race-"))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        seed = self.tmp / "seed"
+        self.git(self.tmp, "init", "-q", "-b", "main", str(seed))
+        self.git(seed, "commit", "-q", "--allow-empty", "-m", "c1")
+        self.origin = self.tmp / "origin.git"
+        self.git(self.tmp, "clone", "-q", "--bare", str(seed), str(self.origin))
+        self.repo = self.tmp / "clone"
+        self.git(self.tmp, "clone", "-q", str(self.origin), str(self.repo))
+        self.git(self.repo, "update-ref", "-d", "--no-deref", "refs/remotes/origin/HEAD")
+        self.baseline = self.repo / ".agent-log" / ("policy-baseline-unlock-%s.json" % SID)
+
+    def git(self, cwd, *a):
+        subprocess.run(["git", "-C", str(cwd), "-c", "user.email=t@t", "-c", "user.name=t", *a],
+                       check=True, capture_output=True)
+
+    def env(self, managed=True):
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(self.repo))
+        for k in ("CLAUDE_CODE_REMOTE", "HARNESS_BOUNDARY", "HARNESS_ROOT"):
+            env.pop(k, None)
+        if managed:
+            env["CLAUDE_CODE_REMOTE"] = "true"
+        return env
+
+    def payload(self, source="startup"):
+        return json.dumps({"session_id": SID, "transcript_path": "/x/%s.jsonl" % SID,
+                           "hook_event_name": "SessionStart", "source": source})
+
+    def start(self, argv, env, payload=""):
+        p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, text=True, env=env)
+        self.addCleanup(lambda: p.poll() is None and p.kill())
+        p.stdin.write(payload)
+        p.stdin.close()
+        return p
+
+    def finish(self, p):
+        out, err = p.communicate(timeout=30)
+        self.assertEqual(p.returncode, 0, err)
+        return out
+
+    def session_start(self, env, payload):
+        return self.start(["bash", str(HOOK)], env, payload)
+
+    def stand_in(self, env, delay, set_ref):
+        """policy-integrity's startup order, slowed down: after `delay` seconds
+        point origin/HEAD at origin/main (or leave it), then write the baseline."""
+        ref = ("git -C '%s' symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main\n"
+               % self.repo) if set_ref else ""
+        script = "sleep %s\n%smkdir -p '%s'\necho '{}' > '%s'\n" % (
+            delay, ref, self.baseline.parent, self.baseline)
+        return self.start(["bash", "-c", script], env)
+
+    def test_waits_for_the_baseline_before_calling_the_default_unknown(self):
+        # Red before the fix: session-start read origin/HEAD at once and warned.
+        env = self.env()
+        other = self.stand_in(env, 1, set_ref=True)
+        out = self.finish(self.session_start(env, self.payload()))
+        self.finish(other)
+        self.assertNotIn(UNKNOWN, out)
+        self.assertIn("on the default branch 'main'", out)
+
+    def test_real_policy_integrity_in_parallel(self):
+        env = self.env()
+        other = self.start(["bash", str(RUN_PY), str(PI)], env, self.payload())
+        out = self.finish(self.session_start(env, self.payload()))
+        self.finish(other)
+        log = "".join(f.read_text(encoding="utf-8")
+                      for f in (self.repo / ".agent-log").glob("*.md"))
+        self.assertIn("origin/HEAD was unset; set to refs/remotes/origin/main", log)
+        self.assertNotIn(UNKNOWN, out)
+        self.assertIn("on the default branch 'main'", out)
+
+    def test_still_warns_when_the_attempt_leaves_it_unset(self):
+        env = self.env()
+        other = self.stand_in(env, 0.5, set_ref=False)
+        t0 = time.monotonic()
+        out = self.finish(self.session_start(env, self.payload()))
+        elapsed = time.monotonic() - t0
+        self.finish(other)
+        self.assertIn(UNKNOWN, out)
+        self.assertLess(elapsed, 4, "waited on past the baseline: %.1fs" % elapsed)
+
+    def test_no_wait_where_policy_integrity_sets_nothing(self):
+        # No baseline ever appears here, so any wait would run to its bound.
+        cases = (("host", self.env(managed=False), self.payload()),
+                 ("compact", self.env(), self.payload("compact")),
+                 ("clear", self.env(), self.payload("clear")),
+                 ("no input", self.env(), ""))
+        for name, env, payload in cases:
+            with self.subTest(name):
+                t0 = time.monotonic()
+                out = self.finish(self.session_start(env, payload))
+                self.assertIn(UNKNOWN, out)
+                self.assertLess(time.monotonic() - t0, 3)
+
+    def test_resume_with_a_baseline_already_on_disk_does_not_wait(self):
+        self.baseline.parent.mkdir()
+        self.baseline.write_text("{}", encoding="utf-8")
+        t0 = time.monotonic()
+        out = self.finish(self.session_start(self.env(), self.payload("resume")))
+        self.assertIn(UNKNOWN, out)
+        self.assertLess(time.monotonic() - t0, 3)
 
 
 if __name__ == "__main__":

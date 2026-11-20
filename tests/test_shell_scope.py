@@ -492,6 +492,38 @@ class LogMode(ShellScopeCase):
         r = self.run_hook("echo hi > %s" % (self.root / "f.txt"), log=True)
         self.assertEqual(r.stdout, "")
 
+POSIX = hasattr(os, "getuid")
+UID_DIR = (os.path.join(os.path.realpath("/tmp"), "claude-%d" % os.getuid())
+           if POSIX else None)
+TMP_IS_SLASH_TMP = os.path.realpath(tempfile.gettempdir()) == os.path.realpath("/tmp")
+
+
+@unittest.skipUnless(POSIX, "uid-scoped /tmp scratchpad is POSIX only")
+class UidScratchpad(ShellScopeCase):
+    """Same rule as filetool-scope. From a scratchpad cwd a relative target, such as
+    the `Claude-Session:` an email's `>` produced in a quoted commit message,
+    now resolves into scratch instead of out of tree."""
+
+    MSG = ("git commit -q -m \"x\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+           "Claude-Session: https://claude.ai/code/session_x\"")
+
+    def test_own_uid_scratchpad_allows(self):
+        self.assertAllows("echo x > %s" % os.path.join(UID_DIR, "proj", "f.txt"))
+        self.assertAllows("git diff > ../f.patch", cwd=os.path.join(UID_DIR, "proj", "cand"))
+
+    def test_the_recorded_commit_from_a_scratchpad_cwd_allows(self):
+        self.assertAllows(self.MSG, cwd=os.path.join(UID_DIR, "proj", "cand"))
+
+    @unittest.skipIf(TMP_IS_SLASH_TMP, "TMPDIR is /tmp: claude-* is already scratch there")
+    def test_a_uid_prefix_lookalike_asks(self):
+        # Pins the separator in in_tree's UID_SCRATCH + os.sep.
+        self.assertAsks("echo x > %s" % (UID_DIR + "0" + os.sep + "f.txt"))
+
+    @unittest.skipIf(TMP_IS_SLASH_TMP, "TMPDIR is /tmp: claude-* is already scratch there")
+    def test_another_uid_asks(self):
+        self.assertAsks("echo x > %s" % os.path.join(
+            os.path.realpath("/tmp"), "claude-%d" % (os.getuid() + 1), "f.txt"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

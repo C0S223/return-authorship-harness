@@ -129,6 +129,15 @@ NO-FINDINGS-STATIC requires RESIDUAL-RISKS to name what execution would settle.
 - **GATE** — blocked by a hook: stop, quote it verbatim, attempt nothing clever (§8 —
   never paraphrase and retry).
 
+For a BLOCK caused solely by inability to perform required execution, with no surviving
+substantive findings, use the optional execution-refusal header defined in the agent
+binding. A gate refusal alone does not establish that category: a blocked read, scope
+refusal, unresolved finding or a voluntary static-only review stays an ordinary BLOCK.
+Keep any substantive findings; never discard them to qualify for the category. The category
+records missing execution, not approval or permission to retry. A later independent review
+must earn its own approval with executed proof, at a strict descendant revision containing
+the unchanged refusal file; the gate names any resolution. Never relabel a prior review.
+
 ## Run cap
 
 Stop and return the verdict at **ten probes**, or when two consecutive probes surface

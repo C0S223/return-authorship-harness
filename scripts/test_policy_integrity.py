@@ -47,6 +47,9 @@ class Case(unittest.TestCase):
         self.git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base")
         self.env = dict(os.environ, HARNESS_ROOT=str(self.root))
         self.env.pop("CLAUDE_PROJECT_DIR", None)
+        # hermetic: a cloud marker in the runner's own env must not leak in
+        self.env.pop("CLAUDE_CODE_REMOTE", None)
+        self.env.pop("HARNESS_BOUNDARY", None)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -604,6 +607,123 @@ class Case(unittest.TestCase):
         self.call()
         self.assertEqual(1, len(self.lines("UNGRANTED CHANGED docs/e/CLAUDE.md")))
 
+    def child_checkout(self):
+        child = self.root / "repos" / "child"
+        (child / "sub").mkdir(parents=True)
+        (child / "CLAUDE.md").write_text("child contract\n")
+        (child / "sub" / "AGENTS.md").write_text("nested contract\n")
+        (child / "sub" / "AGENTS.override.md").write_text("override contract\n")
+        (child / ".claude" / "hooks").mkdir(parents=True)
+        (child / ".claude" / "hooks" / "own.py").write_text("own policy\n")
+        subprocess.run(["git", "-C", str(child), "init", "-q"], check=True,
+                       capture_output=True)
+        subprocess.run(["git", "-C", str(child), "add", "."], check=True,
+                       capture_output=True)
+        # Match the harness: its index cannot discover contracts in repos/.
+        (self.root / ".gitignore").write_text("repos/\n")
+        return child
+
+    def test_child_tracked_claude_md_edit_is_recorded(self):
+        child = self.child_checkout()
+        self.start()
+        self.call()
+        self.assertEqual([], self.lines("UNGRANTED"), self.log())
+        (child / "CLAUDE.md").write_text("child contract changed\n")
+        self.call()
+        self.assertEqual(1, len(self.lines("UNGRANTED CHANGED repos/child/CLAUDE.md")),
+                         self.log())
+
+    def test_child_nested_tracked_agents_md_edit_is_recorded(self):
+        child = self.child_checkout()
+        self.start()
+        (child / "sub" / "AGENTS.md").write_text("nested contract changed\n")
+        self.call()
+        self.assertEqual(1, len(self.lines("UNGRANTED CHANGED repos/child/sub/AGENTS.md")),
+                         self.log())
+
+    def test_child_nested_tracked_agents_override_edit_is_recorded(self):
+        child = self.child_checkout()
+        self.start()
+        (child / "sub" / "AGENTS.override.md").write_text("override changed\n")
+        self.call()
+        self.assertEqual(
+            1, len(self.lines("UNGRANTED CHANGED repos/child/sub/AGENTS.override.md")),
+            self.log())
+
+    def test_child_untracked_non_contract_file_is_ignored(self):
+        child = self.child_checkout()
+        self.start()
+        (child / "notes.txt").write_text("untracked child notes\n")
+        self.call()
+        self.assertEqual([], self.lines("UNGRANTED") + self.lines("hook error"), self.log())
+
+    def test_child_own_hook_is_not_watched(self):
+        child = self.child_checkout()
+        self.start()
+        (child / ".claude" / "hooks" / "own.py").write_text("own policy changed\n")
+        self.call()
+        self.assertEqual([], self.lines("UNGRANTED") + self.lines("hook error"), self.log())
+        self.assertEqual({"."}, set(json.loads(self._bp().read_text())["roots"]))
+
+    def test_child_broken_gitfile_reports_not_baselined(self):
+        child = self.root / "repos" / "broken"
+        child.mkdir(parents=True)
+        (child / ".git").write_text("gitdir: missing-gitdir\n")
+        (child / "CLAUDE.md").write_text("uncovered contract\n")
+        self.start()
+        lines = self.lines("NOT-BASELINED repos/broken:")
+        self.assertEqual(1, len(lines), self.log())
+        self.assertIn("git ls-files failed rc=128: fatal:", lines[0])
+        self.assertEqual([], self.lines("hook error"), self.log())
+        self.assertTrue(self._bp().exists())
+
+    def test_child_pull_reads_ungranted_and_runs_no_child_filter(self):
+        # A child's config is unwatched, so its pulls are never trusted as merged.
+        child = self.child_checkout()
+        upstream = self.tmp / "upstream"
+        child.rename(upstream)
+
+        def upstream_git(*args):
+            subprocess.run(["git", "-C", str(upstream), *args], check=True,
+                           capture_output=True)
+
+        upstream_git("-c", "user.email=t@t", "-c", "user.name=t",
+                     "commit", "-qm", "base child")
+        subprocess.run(["git", "clone", "-q", str(upstream), str(child)],
+                       check=True, capture_output=True)
+        marker = self.tmp / "filter-ran"
+        subprocess.run(["git", "-C", str(child), "config", "filter.f.smudge",
+                        "touch '%s'; cat" % marker], check=True, capture_output=True)
+        (child / ".git" / "info").mkdir(exist_ok=True)
+        (child / ".git" / "info" / "attributes").write_text("CLAUDE.md filter=f\n")
+        self.start()
+        (upstream / "CLAUDE.md").write_text("reviewed child contract\n")
+        upstream_git("-c", "user.email=t@t", "-c", "user.name=t",
+                     "commit", "-qam", "reviewed child")
+        subprocess.run(["git", "-C", str(child), "pull", "-q", "--ff-only"],
+                       check=True, capture_output=True)
+        marker.unlink(missing_ok=True)   # the pull's own checkout ran it
+        self.call()
+        self.assertEqual(1, len(self.lines("UNGRANTED CHANGED repos/child/CLAUDE.md")),
+                         self.log())
+        self.assertEqual([], self.lines("MERGED"), self.log())
+        self.assertFalse(marker.exists(), "the hook ran a child filter")
+
+    def test_non_git_directory_under_repos_is_ignored(self):
+        plain = self.root / "repos" / "plain"
+        plain.mkdir(parents=True)
+        (plain / "CLAUDE.md").write_text("ordinary directory\n")
+        # Pins error-free handling and no new coverage for untracked contracts.
+        # The parent's deep scan already covers this tracked contract; this
+        # does not test whether the child .git guard avoids a redundant git call.
+        self.git("add", "repos/plain/CLAUDE.md")
+        (self.root / ".gitignore").write_text("repos/\n")
+        self.start()
+        (plain / "AGENTS.md").write_text("untracked contract\n")
+        self.call()
+        self.assertEqual([], self.lines("UNGRANTED") + self.lines("hook error"), self.log())
+        self.assertEqual({"."}, set(json.loads(self._bp().read_text())["roots"]))
+
     def test_commit_on_a_branch_writes_no_line(self):
         self.start()
         (self.root / "notes.md").write_text("commit fodder\n")
@@ -846,6 +966,68 @@ class Case(unittest.TestCase):
             Path(name).rename(bp)
         self.assertEqual(3, len(self.lines("skipped")))
         self.assertEqual([], self.lines("hook error"))
+
+    # --- origin/HEAD set at managed-cloud session start ----------------
+    def with_origin(self, reachable=True):
+        """A local bare origin whose HEAD is main, fetched, and this checkout's
+        refs/remotes/origin/HEAD removed (what a cloud clone-after-setup leaves)."""
+        bare = self.tmp / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+        subprocess.run(["git", "-C", str(bare), "symbolic-ref", "HEAD", "refs/heads/main"],
+                       check=True)
+        self.git("remote", "add", "origin", str(bare))
+        self.git("push", "-q", "origin", "HEAD:refs/heads/main")
+        self.git("fetch", "-q", "origin")
+        self.git("update-ref", "-d", "--no-deref", "refs/remotes/origin/HEAD")
+        if not reachable:
+            shutil.rmtree(bare)
+        return bare
+
+    def origin_head(self):
+        r = subprocess.run(["git", "-C", str(self.root), "symbolic-ref", "-q",
+                            "refs/remotes/origin/HEAD"], capture_output=True, text=True)
+        return r.stdout.strip() if r.returncode == 0 else None
+
+    def test_cloud_start_sets_unset_origin_head_before_the_baseline(self):
+        self.with_origin()
+        self.assertIsNone(self.origin_head())
+        self.env["CLAUDE_CODE_REMOTE"] = "true"
+        self.start()
+        self.assertEqual("refs/remotes/origin/main", self.origin_head())
+        self.assertEqual(1, len(self.lines("origin/HEAD was unset; set to refs/remotes/origin/main")),
+                         self.log())
+        bp = self.root / ".agent-log" / ("policy-baseline-unlock-%s.json" % SID)
+        self.assertIn(".git/refs/remotes/origin/HEAD", json.loads(bp.read_text())["roots"]["."])
+        self.call()
+        self.assertEqual([], self.lines("UNGRANTED"), self.log())
+        self.assertEqual([], self.lines("MERGED") + self.lines("granted"), self.log())
+
+    def test_host_start_leaves_origin_head_unset(self):
+        self.with_origin()
+        self.start()
+        self.assertIsNone(self.origin_head())
+        self.assertEqual([], self.lines("origin/HEAD was unset"))
+        self.env["HARNESS_BOUNDARY"] = "selfhost"
+        self.start(sid=OTHER)
+        self.assertIsNone(self.origin_head())
+
+    def test_cloud_start_with_unreachable_origin_stays_unset_and_exits_zero(self):
+        self.with_origin(reachable=False)
+        self.env["CLAUDE_CODE_REMOTE"] = "true"
+        self.start()      # hook() asserts exit 0
+        self.assertIsNone(self.origin_head())
+        self.assertEqual(1, len(self.lines("origin/HEAD was unset; set-head origin --auto failed")),
+                         self.log())
+        self.assertEqual(1, len(self.lines("BASELINE")))
+
+    def test_cloud_start_never_moves_a_set_origin_head(self):
+        self.with_origin()
+        self.git("update-ref", "refs/remotes/origin/lane-1", "HEAD")
+        self.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/lane-1")
+        self.env["CLAUDE_CODE_REMOTE"] = "true"
+        self.start()
+        self.assertEqual("refs/remotes/origin/lane-1", self.origin_head())
+        self.assertEqual([], self.lines("origin/HEAD was unset"))
 
     def test_log_path_is_sanitised(self):
         self.start()

@@ -87,6 +87,32 @@ class Asks(FiletoolScopeCase):
     def test_unreadable_stdin_asks(self):
         self.assertAsks("this is not json")
 
+POSIX = hasattr(os, "getuid")
+UID_DIR = (os.path.join(os.path.realpath("/tmp"), "claude-%d" % os.getuid())
+           if POSIX else None)
+TMP_IS_SLASH_TMP = os.path.realpath(tempfile.gettempdir()) == os.path.realpath("/tmp")
+
+
+@unittest.skipUnless(POSIX, "uid-scoped /tmp scratchpad is POSIX only")
+class UidScratchpad(FiletoolScopeCase):
+    """Claude Code's scratchpad is /tmp/claude-<uid> even where TMPDIR points
+    elsewhere (macOS /var/folders); every scratchpad write asked on a Mac host."""
+
+    def test_own_uid_scratchpad_allows(self):
+        self.assertAllows(self.write_payload(os.path.join(UID_DIR, "proj", "f.txt")))
+
+    def test_a_dotdot_escape_from_it_asks(self):
+        self.assertAsks(self.write_payload(os.path.join(UID_DIR, "..", "elsewhere", "f.txt")))
+
+    @unittest.skipIf(TMP_IS_SLASH_TMP, "TMPDIR is /tmp: claude-* is already scratch there")
+    def test_another_uid_asks(self):
+        self.assertAsks(self.write_payload(os.path.join(
+            os.path.realpath("/tmp"), "claude-%d" % (os.getuid() + 1), "f.txt")))
+
+    @unittest.skipIf(TMP_IS_SLASH_TMP, "TMPDIR is /tmp: claude-* is already scratch there")
+    def test_a_uid_prefix_lookalike_asks(self):
+        self.assertAsks(self.write_payload(UID_DIR + "0" + os.sep + "f.txt"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

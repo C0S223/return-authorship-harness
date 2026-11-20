@@ -17,11 +17,20 @@ ROOT = os.path.normcase(os.path.realpath(
     or os.environ.get("CLAUDE_PROJECT_DIR")
     or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 TMP = os.path.normcase(os.path.realpath(tempfile.gettempdir()))
+# Claude Code keeps its scratchpad at /tmp/claude-<uid>/... even where TMPDIR
+# points elsewhere (macOS: /var/folders/.../T), so on POSIX that ONE directory,
+# for this user's uid only, is scratch too. Without it every scratchpad write
+# on a Mac host asked for every command.
+UID_SCRATCH = (os.path.normcase(os.path.join(os.path.realpath("/tmp"),
+                                             "claude-%d" % os.getuid()))
+               if hasattr(os, "getuid") else None)
 
 
 def is_scratch(p):
     """The harness scratchpad: <tmp>/claude or <tmp>/claude-<suffix> (a cloud
-    session's is /tmp/claude-<uid>/...), and anything under it."""
+    session's is /tmp/claude-<uid>/...), /tmp/claude-<own uid>, and anything under it."""
+    if UID_SCRATCH and (p == UID_SCRATCH or p.startswith(UID_SCRATCH + os.sep)):
+        return True
     if not p.startswith(TMP + os.sep):
         return False
     top = p[len(TMP) + 1:].split(os.sep, 1)[0]

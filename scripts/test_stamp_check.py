@@ -4,7 +4,18 @@ senior-engineer delta review (32-34), round-2 review repairs (35-38: the
 policy-named carve-out, the `..`-segment guard, and the review's own residual
 risks), per-kind voiding and its repair (45-48: a voided BLOCK never revives an
 older APPROVE), and base merges (49-64: a clean
-merge of the base keeps stamps; hand-resolved files void per kind).
+merge of the base keeps stamps; hand-resolved files void per kind), and
+*.log as prose (65-69: an AR-only APPROVE passes
+a log-only lane, an SE-only one fails, .LOG too, per-kind voiding), and the
+two .md-only literals that .log must not reach (70-71: own-desk exclusion and
+the flat grills/<name>.md addition), and the added audit copy under
+handoffs/auto/ (72-82: exempt like a grill addition, additions
+in the session-close hook's own name shape only, never a stamp candidate,
+never a compaction handoff). A later rule retired
+per-kind voiding and the first-parent base-merge walk: any non-exempt change
+after REVISION voids every stamp, and a clean base merge is read from content
+(39-42, 45, 48, 50-63, 68-69, 71 follow it; 56 and 64 keep their refusals).
+Own-desk prose after an APPROVE stays exempt (83-86); a BLOCK it still voids.
 
 New tool, no baseline defect: red-before-green does not apply. Each case's
 docstring names the single-point mutant of stamp_check.py that would make the
@@ -237,8 +248,8 @@ class StampCheckTest(unittest.TestCase):
 
     def test_13a_unknown_extension_is_code(self):
         """Spec change 1: classification inverts —
-        prose is only .md; a .cs file is code, so an AR-only APPROVE cannot
-        cover it. Mutant killed: reverting to an explicit CODE_EXTS
+        prose was only .md (round 3; a later change adds .log); a .cs file is
+        code, so an AR-only APPROVE cannot cover it. Mutant killed: reverting to an explicit CODE_EXTS
         allowlist that omits .cs."""
         self._branch("lane")
         rev = self._commit({"lib/Probe.cs": "class Probe {}\n"},
@@ -301,14 +312,11 @@ class StampCheckTest(unittest.TestCase):
         rev = self._commit({"foo.py": "x = 1\n"}, "code change")
         self._commit(self._stamp("grills/se.md",
                                   "APPROVE", "senior-engineer", rev), "se stamp")
-        base_commit = self._git("rev-parse", "master")
-
         real_git = stamp_check._git
 
         def stub(*args):
             if (len(args) >= 4 and args[0] == "merge-base"
-                    and args[1] == "--is-ancestor"
-                    and args[2] == base_commit and args[3] == rev):
+                    and args[1] == "--is-ancestor" and args[2] == rev):
                 return 128, "", "stubbed: fatal: bad object"
             return real_git(*args)
 
@@ -342,7 +350,7 @@ class StampCheckTest(unittest.TestCase):
                      "se approve of pre-merge-base c1")
         code, out = self._run("master", "lane")
         self.assertEqual(1, code, out)
-        self.assertIn("stale base", out)
+        self.assertIn("covers=no (changed after REVISION: ['foo.py'])", out)
 
         # Prove the fixture actually isolates the merge-base-ancestor check:
         # with only that check deleted from a patched copy of covers(), the
@@ -352,9 +360,9 @@ class StampCheckTest(unittest.TestCase):
         with open(stamp_check.__file__, encoding="utf-8") as fh:
             src = fh.read()
         # The base-merge change moved the check into a branch: the mutant drops the gate.
-        marker = '    if _is_ancestor(base_commit, rev):\n'
+        marker = '    if fork_rev != fork_head:\n'
         self.assertIn(marker, src, "F4 mutant site text moved; update the marker")
-        mutated_src = src.replace(marker, "    if True:\n", 1)
+        mutated_src = src.replace(marker, "    if False:\n", 1)
         exec(compile(mutated_src, stamp_check.__file__, "exec"), patched.__dict__)
         cwd = os.getcwd()
         os.chdir(self.repo)
@@ -457,7 +465,7 @@ class StampCheckTest(unittest.TestCase):
         self.assertEqual(1, code, out)
         self.assertIn("malformed stamp header", out)
 
-    # -- round 4 spec change 4: prose narrowed to .md only -------------------
+    # -- round 4 spec change 4: prose narrowed to .md only (a later change adds .log)
 
     def test_20_txt_only_is_code(self):
         """Spec change 4: .txt moves from prose to code. The AR delta showed
@@ -510,13 +518,13 @@ class StampCheckTest(unittest.TestCase):
         of raising -- under that shape returncode 1 reads as _is_ancestor's
         real "no", the BLOCK does not cover, and only the APPROVE remains,
         so the gate wrongly exits 0."""
-        rev1, _rev2, merge_base = self._block_at_rev1_approve_at_rev2()
+        rev1, _rev2, _merge_base = self._block_at_rev1_approve_at_rev2()
         real_run = stamp_check.subprocess.run
         target = ["-c", "core.longpaths=true", "merge-base",
-                  "--is-ancestor", merge_base, rev1]
+                  "--is-ancestor", rev1]
 
         def stub(cmd, *a, **kw):
-            if cmd[1:] == target:
+            if cmd[1:6] == target:
                 raise subprocess.TimeoutExpired(cmd=cmd, timeout=kw.get("timeout", 30))
             return real_run(cmd, *a, **kw)
 
@@ -917,7 +925,7 @@ class StampCheckTest(unittest.TestCase):
         self.assertTrue(is_own(
             "A", "work/38-x/REPORT.md", "38"))
 
-    # -- per-kind voiding -------
+    # -- voiding (per kind until the minimum rewrite; now any change) -------
 
     def _mixed_both_approved(self):
         self._branch("lane")
@@ -930,29 +938,27 @@ class StampCheckTest(unittest.TestCase):
                      "ar stamp")
         return rev
 
-    def test_39_prose_repair_keeps_se_approve(self):
-        """A README-only repair after both APPROVEs needs only a fresh AR
-        stamp; the SE APPROVE still covers."""
+    def test_39_prose_repair_voids_se_approve_too(self):
+        """A README-only repair after both APPROVEs voids the SE
+        APPROVE as well; a fresh AR stamp alone does not pass."""
         self._mixed_both_approved()
         rev2 = self._commit({"notes.md": "prose, repaired\n"}, "prose repair")
         self._commit(self._stamp("grills/ar2.md",
                                   "APPROVE", "adversarial-reviewer", rev2),
                      "ar re-stamp")
         code, out = self._run("master", "lane")
-        self.assertEqual(0, code, out)
-        self.assertIn("senior-engineer: PASS - covering APPROVE "
-                      "(grills/se.md)", out)
+        self.assertEqual(1, code, out)
+        self.assertIn("senior-engineer: FAIL - no covering APPROVE", out)
 
-    def test_40_code_repair_keeps_ar_approve(self):
+    def test_40_code_repair_voids_ar_approve_too(self):
         self._mixed_both_approved()
         rev2 = self._commit({"foo.py": "x = 2\n"}, "code repair")
         self._commit(self._stamp("grills/se2.md",
                                   "APPROVE", "senior-engineer", rev2),
                      "se re-stamp")
         code, out = self._run("master", "lane")
-        self.assertEqual(0, code, out)
-        self.assertIn("adversarial-reviewer: PASS - covering APPROVE "
-                      "(grills/ar.md)", out)
+        self.assertEqual(1, code, out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
 
     def test_41_prose_repair_still_voids_ar_approve(self):
         self._mixed_both_approved()
@@ -960,18 +966,18 @@ class StampCheckTest(unittest.TestCase):
         code, out = self._run("master", "lane")
         self.assertEqual(1, code, out)
         self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
-        self.assertIn("senior-engineer: PASS", out)
+        self.assertIn("senior-engineer: FAIL - no covering APPROVE", out)
 
     def test_42_code_repair_still_voids_se_approve(self):
         """Includes a code-classified file under grills/ (H1's x.py): it is
-        code, so it voids the SE APPROVE even though AR's survives."""
+        code, so it voids the SE APPROVE (and, since the rewrite, AR's too)."""
         self._mixed_both_approved()
         self._commit({"grills/x.py": "y = 2\n"},
                      "sneak code in under grills/")
         code, out = self._run("master", "lane")
         self.assertEqual(1, code, out)
         self.assertIn("senior-engineer: FAIL - no covering APPROVE", out)
-        self.assertIn("adversarial-reviewer: PASS", out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
 
     def test_43_block_voided_by_change_of_other_kind(self):
         """An SE BLOCK on a README clause clears when the README is
@@ -995,24 +1001,29 @@ class StampCheckTest(unittest.TestCase):
     def test_44_is_prose_unit_probes(self):
         self.assertTrue(stamp_check.is_prose("a/README.MD"))
         self.assertTrue(stamp_check.is_prose("notes.md"))
+        self.assertTrue(stamp_check.is_prose("DEPLOYS.log"))
+        self.assertTrue(stamp_check.is_prose("x.LOG"))
+        self.assertFalse(stamp_check.is_prose("x.log.py"))
         self.assertFalse(stamp_check.is_prose("notes.txt"))
         self.assertFalse(stamp_check.is_prose("Makefile"))
         self.assertFalse(stamp_check.is_prose("x.md.py"))
+        self.assertFalse(stamp_check.is_prose("CHANGELOG"))
+        self.assertFalse(stamp_check.is_prose("x.catalog"))
 
     # -- Review finding: a voided BLOCK never revives an older APPROVE ----
 
     def test_45_own_desk_commit_does_not_revive_older_se_approve(self):
-        """Probe P5: code-only lane, SE APPROVE@R0, own-desk REPORT (R1),
-        SE BLOCK@R1 on unchanged code, another own-desk report."""
+        """SE APPROVE@R0, a code change (R1), SE BLOCK@R1, then a revert to
+        R0's bytes: the APPROVE covers HEAD again, the BLOCK does not, and
+        supersession still refuses the APPROVE."""
         self._branch("lane-77")
         r0 = self._commit({"foo.py": "x = 1\n"}, "code")
         self._commit(self._stamp("grills/se1.md",
                                   "APPROVE", "senior-engineer", r0), "se approve")
-        r1 = self._commit({"work/77-x/REPORT.md": "r\n"}, "report")
+        r1 = self._commit({"foo.py": "x = 2\n"}, "change")
         self._commit(self._stamp("grills/se2.md",
                                   "BLOCK", "senior-engineer", r1), "se block")
-        self._commit({"work/77-x/REPORT-SWING2.md": "r2\n"},
-                     "report 2")
+        self._commit({"foo.py": "x = 1\n"}, "revert")
         code, out = self._run("master", "lane-77")
         self.assertEqual(1, code, out)
         self.assertIn("se1.md superseded by BLOCK grills/se2.md", out)
@@ -1051,17 +1062,13 @@ class StampCheckTest(unittest.TestCase):
         self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
 
     def test_48_block_at_same_revision_supersedes_approve(self):
-        """Same REVISION: fail closed, the BLOCK wins even once a change
-        of the other kind has voided it."""
+        """Same REVISION: fail closed, the BLOCK wins."""
         self._branch("lane")
-        r0 = self._commit({"foo.py": "x = 1\n", "notes.md": "p\n"}, "mixed")
+        r0 = self._commit({"foo.py": "x = 1\n"}, "code")
         self._commit(self._stamp("grills/se1.md",
                                   "APPROVE", "senior-engineer", r0), "se approve")
         self._commit(self._stamp("grills/se2.md",
                                   "BLOCK", "senior-engineer", r0), "se block")
-        r1 = self._commit({"notes.md": "p1\n"}, "prose")
-        self._commit(self._stamp("grills/ar.md",
-                                  "APPROVE", "adversarial-reviewer", r1), "ar")
         code, out = self._run("master", "lane")
         self.assertEqual(1, code, out)
         self.assertIn("se1.md superseded by BLOCK", out)
@@ -1090,7 +1097,7 @@ class StampCheckTest(unittest.TestCase):
         self.assertIn("senior-engineer: PASS", out)
         self.assertIn("adversarial-reviewer: PASS", out)
 
-    def test_50_code_conflict_fix_voids_se_only(self):
+    def test_50_code_conflict_fix_voids_both(self):
         self._mixed_both_approved()
         self._advance_master({"foo.py": "x = 9\n"})
         self.assertEqual(1, self._merge_no_commit("master"), "fixture needs a conflict")
@@ -1098,9 +1105,9 @@ class StampCheckTest(unittest.TestCase):
         code, out = self._run("master", "lane")
         self.assertEqual(1, code, out)
         self.assertIn("senior-engineer: FAIL - no covering APPROVE", out)
-        self.assertIn("adversarial-reviewer: PASS", out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
 
-    def test_51_prose_conflict_fix_voids_ar_only(self):
+    def test_51_prose_conflict_fix_voids_both(self):
         self._mixed_both_approved()
         self._advance_master({"notes.md": "master prose\n"})
         self.assertEqual(1, self._merge_no_commit("master"), "fixture needs a conflict")
@@ -1108,7 +1115,7 @@ class StampCheckTest(unittest.TestCase):
         code, out = self._run("master", "lane")
         self.assertEqual(1, code, out)
         self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
-        self.assertIn("senior-engineer: PASS", out)
+        self.assertIn("senior-engineer: FAIL - no covering APPROVE", out)
 
     def test_52_both_sides_auto_merge_counts_as_resolved(self):
         """Fail closed: a file both sides changed is unreviewed in its merged
@@ -1135,7 +1142,7 @@ class StampCheckTest(unittest.TestCase):
         self._merge("master")
         code, out = self._run("master", "lane")
         self.assertEqual(1, code, out)
-        self.assertIn("is not a base merge", out)
+        self.assertIn("covers=no (changed after REVISION", out)
 
     def test_54_revision_on_base_still_stale_with_base_merge(self):
         """Test 16's shape plus a later base merge: REVISION is a master
@@ -1151,15 +1158,15 @@ class StampCheckTest(unittest.TestCase):
                      "se approve of a master commit")
         code, out = self._run("master", "lane")
         self.assertEqual(1, code, out)
-        self.assertIn("stale base", out)
+        self.assertIn("covers=no (changed after REVISION", out)
 
         import types
         patched = types.ModuleType("stamp_check_mutant_merge")
         with open(stamp_check.__file__, encoding="utf-8") as fh:
             src = fh.read()
-        marker = '    if _is_ancestor(rev, base_commit):\n        return None, STALE_BASE\n'
+        marker = '    if fork_rev != fork_head:\n'
         self.assertIn(marker, src, "merge mutant site text moved; update the marker")
-        exec(compile(src.replace(marker, "", 1), stamp_check.__file__, "exec"),
+        exec(compile(src.replace(marker, "    if False:\n", 1), stamp_check.__file__, "exec"),
              patched.__dict__)
         cwd = os.getcwd()
         os.chdir(self.repo)
@@ -1199,7 +1206,7 @@ class StampCheckTest(unittest.TestCase):
         code, out = self._run("master", "lane")
         self.assertEqual(1, code, out)
         self.assertIn("senior-engineer: FAIL - no covering APPROVE", out)
-        self.assertIn("adversarial-reviewer: PASS", out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
 
     def _merge_no_commit(self, other):
         # merge checks identity even with --no-commit; CI has none
@@ -1215,7 +1222,7 @@ class StampCheckTest(unittest.TestCase):
                   "-c", "user.name=fixture", "-c", "commit.gpgsign=false",
                   "commit", "-q", "--no-edit", "-m", message)
 
-    def test_58_merge_s_ours_voids_kind_of_dropped_base_change(self):
+    def test_58_merge_s_ours_voids_both(self):
         """SE round-1 F1: `-s ours` keeps the lane's tree, so no path differs
         from every parent, yet master's change is silently undone."""
         self._mixed_both_approved()
@@ -1226,9 +1233,9 @@ class StampCheckTest(unittest.TestCase):
         code, out = self._run("master", "lane")
         self.assertEqual(1, code, out)
         self.assertIn("senior-engineer: FAIL - no covering APPROVE", out)
-        self.assertIn("adversarial-reviewer: PASS", out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
 
-    def test_59_checkout_ours_conflict_fix_voids_its_kind(self):
+    def test_59_checkout_ours_conflict_fix_voids_both(self):
         self._mixed_both_approved()
         self._advance_master({"foo.py": "x = 9\n"})
         self.assertEqual(1, self._merge_no_commit("master"), "fixture needs a conflict")
@@ -1238,9 +1245,9 @@ class StampCheckTest(unittest.TestCase):
         code, out = self._run("master", "lane")
         self.assertEqual(1, code, out)
         self.assertIn("senior-engineer: FAIL - no covering APPROVE", out)
-        self.assertIn("adversarial-reviewer: PASS", out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
 
-    def test_60_merge_removing_base_added_file_voids_its_kind(self):
+    def test_60_merge_removing_base_added_file_voids_both(self):
         self._mixed_both_approved()
         self._advance_master({"new.py": "n = 1\n"})
         self.assertEqual(0, self._merge_no_commit("master"))
@@ -1249,21 +1256,20 @@ class StampCheckTest(unittest.TestCase):
         code, out = self._run("master", "lane")
         self.assertEqual(1, code, out)
         self.assertIn("senior-engineer: FAIL - no covering APPROVE", out)
-        self.assertIn("adversarial-reviewer: PASS", out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
 
     def test_61_merge_removing_reviewed_lane_file_voids_its_stamp(self):
-        """The merge drops the lane's only code file, so the PR needs no SE
-        stamp and the gate passes; the SE APPROVE itself no longer covers."""
+        """The merge drops the lane's only code file: a lane change after
+        REVISION, so neither APPROVE covers."""
         self._mixed_both_approved()
         self._advance_master({"other.md": "o\n"})
         self.assertEqual(0, self._merge_no_commit("master"))
         self._git("rm", "-q", "foo.py")
         self._finish_merge()
         code, out = self._run("master", "lane")
-        self.assertEqual(0, code, out)
-        self.assertIn("covers=no (REVISION..HEAD adds or changes "
-                      "non-grills-addition(s): [('M', 'foo.py')])", out)
-        self.assertIn("adversarial-reviewer: PASS", out)
+        self.assertEqual(1, code, out)
+        self.assertIn("covers=no (changed after REVISION: ['foo.py'])", out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
 
     def test_62_octopus_merge_with_base_is_not_a_base_merge(self):
         """SE round-1 F3: the three-parent guard, pinned by its reason."""
@@ -1279,17 +1285,17 @@ class StampCheckTest(unittest.TestCase):
                                           "HEAD").split()) - 1)
         code, out = self._run("master", "lane")
         self.assertEqual(1, code, out)
-        self.assertIn("is not a base merge", out)
-    def test_63_identical_change_on_both_sides_does_not_count(self):
-        """SE round-2 F1: master adds a byte-identical foo.py; the merge takes
-        it unchanged from either parent, so both APPROVEs still cover."""
+        self.assertIn("after REVISION has 3 parents", out)
+    def test_63_identical_change_on_both_sides_counts(self):
+        """Fail closed: master adds a byte-identical foo.py, a
+        lane path the base moved, so the stamps no longer cover."""
         self._mixed_both_approved()
         self._advance_master({"foo.py": "x = 1\n"})
         self._merge("master")
         code, out = self._run("master", "lane")
-        self.assertEqual(0, code, out)
-        self.assertRegex(out, r"senior-engineer: \S+ stamp=APPROVE \S+ covers=yes")
-        self.assertIn("adversarial-reviewer: PASS", out)
+        self.assertEqual(1, code, out)
+        self.assertRegex(out, r"senior-engineer: \S+ stamp=APPROVE \S+ covers=no")
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
 
     def test_64_stacked_lane_with_two_merge_bases_is_stale(self):
         """SE round-2 F2: lane forks sibling lane x; master merges x between
@@ -1313,6 +1319,676 @@ class StampCheckTest(unittest.TestCase):
         code, out = self._run("master", "lane")
         self.assertEqual(1, code, out)
         self.assertIn("has 2 merge-bases", out)
+
+    # -- Option b: *.log counts as prose -----------------
+
+    def test_65_log_only_lane_ar_approve_passes(self):
+        """Mutant: PROSE_EXTS = {".md"} classifies DEPLOYS.log as code, so
+        an AR-only APPROVE on a log-row lane fails for want of an SE one."""
+        self._branch("lane")
+        rev = self._commit({"projects/site/DEPLOYS.log": "row 1\n"}, "log row")
+        self._commit(self._stamp("grills/ar.md",
+                                  "APPROVE", "adversarial-reviewer", rev),
+                     "ar stamp")
+        code, out = self._run("master", "lane")
+        self.assertEqual(0, code, out)
+        self.assertIn("adversarial-reviewer: PASS - covering APPROVE", out)
+
+    def test_66_log_only_lane_se_approve_fails(self):
+        """Mutant: .log stays code (or both kinds accepted for it): an
+        SE-only APPROVE would pass a log-only lane."""
+        self._branch("lane")
+        rev = self._commit({"projects/site/DEPLOYS.log": "row 1\n"}, "log row")
+        self._commit(self._stamp("grills/se.md",
+                                  "APPROVE", "senior-engineer", rev), "se stamp")
+        code, out = self._run("master", "lane")
+        self.assertEqual(1, code, out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
+
+    def test_67_uppercase_log_is_prose(self):
+        """Mutant: the classifier drops .lower() for .log, so X.LOG is code
+        and an AR-only APPROVE fails."""
+        self._branch("lane")
+        rev = self._commit({"DEPLOYS.LOG": "row 1\n"}, "log row")
+        self._commit(self._stamp("grills/ar.md",
+                                  "APPROVE", "adversarial-reviewer", rev),
+                     "ar stamp")
+        code, out = self._run("master", "lane")
+        self.assertEqual(0, code, out)
+
+    def test_68_log_change_voids_se_approve_too(self):
+        """A .log row appended after both APPROVEs voids the SE
+        APPROVE as well; the AR re-stamp alone does not pass."""
+        self._mixed_both_approved()
+        rev2 = self._commit({"DEPLOYS.log": "row 1\n"}, "log row")
+        self._commit(self._stamp("grills/ar2.md",
+                                  "APPROVE", "adversarial-reviewer", rev2),
+                     "ar re-stamp")
+        code, out = self._run("master", "lane")
+        self.assertEqual(1, code, out)
+        self.assertIn("senior-engineer: FAIL - no covering APPROVE", out)
+
+    def test_69_log_change_voids_both(self):
+        """A .log change after both APPROVEs voids both."""
+        self._mixed_both_approved()
+        self._commit({"DEPLOYS.log": "row 1\n"}, "log row")
+        code, out = self._run("master", "lane")
+        self.assertEqual(1, code, out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
+        self.assertIn("senior-engineer: FAIL - no covering APPROVE", out)
+
+    # -- .log is prose, but not own-desk or a grills addition --
+
+    def test_70_own_desk_log_not_excluded(self):
+        """Own-desk exclusion stays .md only: work/70-x/DEPLOYS.log stays a
+        prose subject, so a lone SE APPROVE fails for want of an AR one.
+        Mutant killed: is_own_desk_prose's last line testing is_prose(path)
+        instead of the literal ".md", which drops the desk .log and passes."""
+        self._branch("lane-70")
+        rev = self._commit({"foo.py": "x = 1\n",
+                            "work/70-x/DEPLOYS.log": "row 1\n"},
+                           "code plus own desk log")
+        self._commit(self._stamp("grills/se.md",
+                                  "APPROVE", "senior-engineer", rev),
+                     "se stamp only")
+        code, out = self._run("master", "lane-70")
+        self.assertEqual(1, code, out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
+        self.assertNotIn("EXCLUDED:", out)
+
+    def test_71_post_review_grills_log_is_a_subject(self):
+        """A grills/ addition must be a flat .md: grills/notes.log added
+        after an SE APPROVE stays a prose subject needing an AR APPROVE.
+        Since the rewrite it voids the SE APPROVE as well. Mutant killed: is_flat_grills_md testing
+        is_prose(rest) instead of rest.endswith(".md"), which drops the
+        .log from the subject and passes the lane on SE alone."""
+        self._branch("lane")
+        rev = self._commit({"foo.py": "x = 1\n"}, "code change")
+        self._commit(self._stamp("grills/se.md",
+                                  "APPROVE", "senior-engineer", rev), "se stamp")
+        self._commit({"grills/notes.log": "fyi\n"}, "later grills log")
+        code, out = self._run("master", "lane")
+        self.assertEqual(1, code, out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
+        self.assertIn("senior-engineer: FAIL - no covering APPROVE", out)
+
+    # -- An added flat handoffs/auto/<name>.md is exempt --------
+
+    AUDIT = "handoffs/auto/2026-10-29-abc-session-close-managed.md"
+
+    def test_72_audit_copy_after_ar_approve_keeps_it(self):
+        """The done-when: a prose lane with a covering AR APPROVE, then
+        the session's audit copy as the last commit, passes with no new
+        grill. Mutant killed: covers() still testing is_flat_grills_md
+        alone, so the added audit copy voids the AR APPROVE."""
+        self._branch("lane-72")
+        rev = self._commit({"docs/x.md": "doc\n"}, "prose change")
+        self._commit(self._stamp("grills/ar.md",
+                                  "APPROVE", "adversarial-reviewer", rev),
+                     "ar stamp")
+        self._commit({self.AUDIT: "log line\n"}, "audit copy")
+        code, out = self._run("master", "lane-72")
+        self.assertEqual(0, code, out)
+        self.assertIn("adversarial-reviewer: PASS - covering APPROVE "
+                      "(grills/ar.md)", out)
+        self.assertIn("EXEMPT: 1 added audit copy file(s) under "
+                      "handoffs/auto/", out)
+
+    def test_73_audit_copy_needs_no_ar_on_code_lane(self):
+        """A code lane whose diff also adds an audit copy needs only SE: the
+        copy is not a prose subject. Mutant killed: run()'s subject still
+        dropping only flat grills additions, so the copy makes AR
+        required."""
+        self._branch("lane-73")
+        rev = self._commit({"foo.py": "x = 1\n", self.AUDIT: "log\n"},
+                           "code plus audit copy")
+        self._commit(self._stamp("grills/se.md",
+                                  "APPROVE", "senior-engineer", rev), "se stamp")
+        code, out = self._run("master", "lane-73")
+        self.assertEqual(0, code, out)
+        self.assertIn("required=['senior-engineer']", out)
+
+    def test_74_modified_audit_copy_voids_ar_approve(self):
+        """Only additions are exempt: an audit copy already on the base and
+        edited after the AR APPROVE voids it. Mutant killed:
+        is_exempt_addition dropping its status == "A" test."""
+        self._commit({self.AUDIT: "log\n"}, "base audit copy")
+        self._branch("lane-74")
+        rev = self._commit({"docs/x.md": "doc\n"}, "prose change")
+        self._commit(self._stamp("grills/ar.md",
+                                  "APPROVE", "adversarial-reviewer", rev),
+                     "ar stamp")
+        self._commit({self.AUDIT: "log\nrewritten\n"}, "edit audit copy")
+        code, out = self._run("master", "lane-74")
+        self.assertEqual(1, code, out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
+        self.assertNotIn("EXEMPT:", out)
+
+    def test_75_nested_audit_path_is_a_subject(self):
+        """Flat only: a copy-shaped name under handoffs/auto/sub/, added
+        after the AR APPROVE, voids it. Mutant killed: a name test that admits "/" (e.g.
+        endswith("-session-close-managed.md") on the rest)."""
+        self._branch("lane-75")
+        rev = self._commit({"docs/x.md": "doc\n"}, "prose change")
+        self._commit(self._stamp("grills/ar.md",
+                                  "APPROVE", "adversarial-reviewer", rev),
+                     "ar stamp")
+        self._commit({"handoffs/auto/sub/" + self.AUDIT[len("handoffs/auto/"):]: "log\n"},
+                     "nested copy")
+        code, out = self._run("master", "lane-75")
+        self.assertEqual(1, code, out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
+
+    def test_76_policy_basename_under_audit_dir_is_a_subject(self):
+        """handoffs/auto/CLAUDE.md is policy at any depth and keeps its
+        reviewer: a code lane adding it with a lone SE APPROVE fails for
+        want of AR. Mutant killed: a name test looser than the hook's shape
+        (e.g. endswith(".md"))."""
+        self._branch("lane-76")
+        rev = self._commit({"foo.py": "x = 1\n",
+                            "handoffs/auto/CLAUDE.md": "rules\n"},
+                           "code plus a policy-named file")
+        self._commit(self._stamp("grills/se.md",
+                                  "APPROVE", "senior-engineer", rev), "se stamp")
+        code, out = self._run("master", "lane-76")
+        self.assertEqual(1, code, out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
+        self.assertNotIn("EXEMPT:", out)
+
+    def test_77_audit_copy_only_lane_is_nothing_to_stamp(self):
+        """An audit copy empties no subject into a pass: a lane adding only
+        one keeps the "nothing to stamp" FAIL, like a grills-only one
+        (29c). Mutant killed: counting audit copies into the own-desk
+        excluded_count, which passes the empty subject."""
+        self._branch("lane-77")
+        self._commit({self.AUDIT: "log\n"}, "audit copy only")
+        code, out = self._run("master", "lane-77")
+        self.assertEqual(1, code, out)
+        self.assertIn('SUBJECT: FAIL ("nothing to stamp; operator\'s call")',
+                      out)
+
+    def test_78_audit_copy_is_never_a_stamp_candidate(self):
+        """A stamp header in an audit copy is not a stamp: a prose lane whose
+        only APPROVE sits in handoffs/auto/ fails. Mutant killed: the
+        candidate loop testing is_exempt_addition instead of
+        is_flat_grills_md."""
+        self._branch("lane-78")
+        rev = self._commit({"docs/x.md": "doc\n"}, "prose change")
+        self._commit(self._stamp(self.AUDIT,
+                                  "APPROVE", "adversarial-reviewer", rev),
+                     "stamp-shaped audit copy")
+        code, out = self._run("master", "lane-78")
+        self.assertEqual(1, code, out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
+
+    def test_79_is_audit_copy_md_unit_probes(self):
+        """The path test alone. Mutants killed: a prefix test on "handoffs/"
+        (handoffs/<copy name>), a looser name test such as endswith(".md")
+        (the compaction handoff, AGENTS.md, x.md), a boundary of any word
+        (-session-close-other.md), and a session part that admits "/"."""
+        f = stamp_check.is_audit_copy_md
+        self.assertTrue(f(self.AUDIT))
+        self.assertTrue(f("handoffs/auto/2026-10-29-0000abcd-session-close-selfhost.md"))
+        self.assertFalse(f("handoffs/" + self.AUDIT[len("handoffs/auto/"):]))
+        self.assertFalse(f("handoffs/auto/2026-10-26-00000000-0000-5000-8000-000000000001.md"))
+        self.assertFalse(f("handoffs/auto/2026-10-29-abc-session-close-other.md"))
+        self.assertFalse(f("handoffs/auto/2026-10-29-abc-session-close-managed.log"))
+        self.assertFalse(f("handoffs/auto/2026-10-29-abc-session-close-managed.MD"))
+        self.assertFalse(f("handoffs/auto/2026-10-29-a/b-session-close-managed.md"))
+        self.assertFalse(f("handoffs/auto/AGENTS.md"))
+        self.assertFalse(f("handoffs/auto/x.md"))
+        self.assertFalse(f("handoffs/autox/2026-10-29-abc-session-close-managed.md"))
+        # and its residual mutants: a trailing newline (`$`),
+        # non-ASCII digits (`\d`), no end anchor, a session part admitting "."
+        # or nothing, no date part, a date of any length
+        self.assertFalse(f(self.AUDIT + "\n"))
+        self.assertFalse(f("handoffs/auto/\u0662\u0660\u0662\u0666-10-29-abc-session-close-managed.md"))
+        self.assertFalse(f(self.AUDIT + ".py"))
+        self.assertFalse(f("handoffs/auto/2026-10-29-a.b-session-close-managed.md"))
+        self.assertFalse(f("handoffs/auto/2026-10-29--session-close-managed.md"))
+        self.assertFalse(f("handoffs/auto/abc-session-close-managed.md"))
+        self.assertFalse(f("handoffs/auto/26-10-29-abc-session-close-managed.md"))
+        # Residuals: an unescaped ".", a session part of \w
+        # (non-ASCII letters), a one-digit month
+        self.assertFalse(f("handoffs/auto/2026-10-29-abc-session-close-managedXmd"))
+        self.assertFalse(f("handoffs/auto/2026-10-29-\u00e9-session-close-managed.md"))
+        self.assertFalse(f("handoffs/auto/2026-1-29-abc-session-close-managed.md"))
+        self.assertFalse(stamp_check.is_exempt_addition("M", self.AUDIT))
+        self.assertTrue(stamp_check.is_exempt_addition("A", self.AUDIT))
+        self.assertTrue(stamp_check.is_exempt_addition("A", "grills/g.md"))
+
+    def test_80_compaction_handoff_is_a_subject(self):
+        """a compaction handoff (check.sh's
+        <date>-<session>.md, the file resume.sh hands to the next session)
+        added after the AR APPROVE voids it. Mutant killed: is_audit_copy_md
+        accepting any flat handoffs/auto/*.md."""
+        self._branch("lane-80")
+        rev = self._commit({"docs/x.md": "doc\n"}, "prose change")
+        self._commit(self._stamp("grills/ar.md",
+                                  "APPROVE", "adversarial-reviewer", rev),
+                     "ar stamp")
+        self._commit({"handoffs/auto/2026-10-29-00000000-0000-5000-8000-"
+                      "000000000001.md": "**Do this first:** x\n"},
+                     "compaction handoff")
+        code, out = self._run("master", "lane-80")
+        self.assertEqual(1, code, out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
+        self.assertNotIn("EXEMPT:", out)
+
+    @unittest.skipIf(os.name == "nt", "Windows forbids a newline in a file "
+                     "name; test 79's unit probe pins the case there")
+    def test_82_newline_named_copy_is_a_subject(self):
+        """`git diff -z` keeps a trailing newline in a
+        path, and `$` matches before one. A copy name ending in a newline,
+        added to a prose lane after its AR APPROVE, is a subject (code, by
+        its extension), so it needs a senior-engineer stamp. Mutant killed:
+        match with "$" in place of fullmatch (EXEMPT, then PASS)."""
+        self._branch("lane-82")
+        rev = self._commit({"docs/x.md": "doc\n"}, "prose change")
+        self._commit(self._stamp("grills/ar.md",
+                                  "APPROVE", "adversarial-reviewer", rev),
+                     "ar stamp")
+        self._commit({self.AUDIT + "\n": "log\n"}, "newline-named copy")
+        code, out = self._run("master", "lane-82")
+        self.assertEqual(1, code, out)
+        self.assertIn("senior-engineer: FAIL - no covering APPROVE", out)
+        self.assertNotIn("EXEMPT:", out)
+
+    def test_81_deleted_audit_copy_voids_ar_approve(self):
+        """Only additions: deleting an audit copy after the AR APPROVE voids
+        it. Mutant killed: is_exempt_addition accepting status D too."""
+        self._commit({self.AUDIT: "log\n"}, "base audit copy")
+        self._branch("lane-81")
+        rev = self._commit({"docs/x.md": "doc\n"}, "prose change")
+        self._commit(self._stamp("grills/ar.md",
+                                  "APPROVE", "adversarial-reviewer", rev),
+                     "ar stamp")
+        self._git("rm", "-q", self.AUDIT)
+        self._git("-c", "user.email=fixture@example.invalid",
+                  "-c", "user.name=fixture", "-c", "commit.gpgsign=false",
+                  "commit", "-q", "-m", "delete audit copy")
+        code, out = self._run("master", "lane-81")
+        self.assertEqual(1, code, out)
+        self.assertIn("adversarial-reviewer: FAIL - no covering APPROVE", out)
+
+    # -- own-desk prose after an APPROVE ----
+
+    def test_83_desk_report_after_se_approve_still_covers(self):
+        """graphs/lane.md lets the hub add a desk report after the candidate:
+        on lane-83, code, an SE APPROVE, then work/83-x/REPORT.md passes.
+        Mutant killed: covers() ignoring is_own_desk_prose (exit 1, F1)."""
+        self._branch("lane-83")
+        rev = self._commit({"foo.py": "x = 1\n"}, "code change")
+        self._commit(self._stamp("grills/se.md",
+                                  "APPROVE", "senior-engineer", rev), "se stamp")
+        self._commit({"work/83-x/REPORT.md": "report\n"}, "desk report")
+        code, out = self._run("master", "lane-83")
+        self.assertEqual(0, code, out)
+        self.assertIn("covers=yes", out)
+
+    def test_84_desk_edit_after_approve_covers_but_code_does_not(self):
+        """An edited desk .md after the APPROVE still covers; a code edit in
+        the same later commit voids it. Mutant killed: the exemption applied
+        to every path, or to status A only (the M edit then voids)."""
+        self._branch("lane-84")
+        self._commit({"work/84-x/DID.md": "did\n"}, "desk")
+        rev = self._commit({"foo.py": "x = 1\n"}, "code change")
+        self._commit(self._stamp("grills/se.md",
+                                  "APPROVE", "senior-engineer", rev), "se stamp")
+        self._commit({"work/84-x/DID.md": "did, edited\n"}, "desk edit")
+        code, out = self._run("master", "lane-84")
+        self.assertEqual(0, code, out)
+        self._commit({"foo.py": "x = 2\n"}, "code edit")
+        code, out = self._run("master", "lane-84")
+        self.assertEqual(1, code, out)
+        self.assertIn("changed after REVISION: ['foo.py']", out)
+
+    def test_85_desk_report_exempt_only_on_lane_head(self):
+        """The exemption needs --head lane-<id>, as the subject exclusion
+        does: the same history by sha fails (the report is a subject there
+        and needs AR anyway). Pins that only lane_id_from_head arms it."""
+        self._branch("lane-85")
+        rev = self._commit({"foo.py": "x = 1\n"}, "code change")
+        self._commit(self._stamp("grills/se.md",
+                                  "APPROVE", "senior-engineer", rev), "se stamp")
+        self._commit({"work/85-x/REPORT.md": "report\n"}, "desk report")
+        head = self._git("rev-parse", "HEAD")
+        code, out = self._run("master", head)
+        self.assertEqual(1, code, out)
+        self.assertIn("covers=no", out)
+
+    def test_86_desk_report_still_voids_a_block(self):
+        """A BLOCK is not exempted: a desk commit after it voids its cover,
+        as lane.md's "The repair voids the BLOCK" needs. The older APPROVE
+        stays superseded, so the gate still fails. Mutant killed: desk_id
+        set for BLOCK too (the BLOCK keeps covering; output differs)."""
+        self._branch("lane-86")
+        rev = self._commit({"foo.py": "x = 1\n"}, "code change")
+        self._commit(self._stamp("grills/se-r1.md",
+                                  "BLOCK", "senior-engineer", rev), "se block")
+        self._commit({"work/86-x/REPORT.md": "report\n"}, "desk repair")
+        code, out = self._run("master", "lane-86")
+        self.assertEqual(1, code, out)
+        self.assertIn("stamp=BLOCK revision=%s covers=no" % rev[:12], out)
+        self.assertNotIn("BLOCK: FAIL - covering BLOCK", out)
+
+
+class ExecutionRefusalCases:
+    """Real histories the CLI gate tests run against.
+
+    The fixtures set only Git identity and disable commit signing. They do not
+    model a live hook grant or GitHub; each checker reads actual commits/blobs.
+    """
+
+    setUp = StampCheckTest.setUp
+    tearDown = StampCheckTest.tearDown
+    _git = StampCheckTest._git
+    _commit = StampCheckTest._commit
+    _branch = StampCheckTest._branch
+    _stamp = StampCheckTest._stamp
+    SE = "senior-engineer"
+    AR = "adversarial-reviewer"
+    REFUSAL = "BLOCK-KIND: EXECUTION-REFUSAL\n"
+
+    def subject(self):
+        self._branch("lane")
+        return self._commit({"foo.py": "x = 1\n"}, "subject")
+
+    def review(self, path, verdict, revision, category="", reviewer=None):
+        header = "STAMP: %s\nREVIEWER: %s\nREVISION: %s\n" % (
+            verdict, reviewer or self.SE, revision)
+        return {path: header + category + "\nnotes\n"}
+
+    def refusal(self, revision, path="grills/refusal.md"):
+        return self._commit(self.review(path, "BLOCK", revision, self.REFUSAL), "refusal")
+
+    def approve(self, revision, path="grills/approve.md", reviewer=None):
+        return self._commit(self.review(path, "APPROVE", revision, reviewer=reviewer), "approval")
+
+    def assert_gate(self, expected, resolved=()):
+        code, out = self.check()
+        self.assertEqual(expected, code, out)
+        for path in resolved:
+            self.assertIn("resolves EXECUTION-REFUSAL " + path, out)
+        return out
+
+    def test_refusal_later_covering_approval_resolves(self):
+        revision = self.subject()
+        filed = self.refusal(revision)
+        self.approve(filed)
+        self.assert_gate(0, ("grills/refusal.md",))
+
+    def test_refusal_alone_blocks(self):
+        self.refusal(self.subject())
+        self.assert_gate(1)
+
+    def test_unclassified_block_stays_blocked_even_with_later_approval(self):
+        revision = self.subject()
+        filed = self._commit(self.review("grills/block.md", "BLOCK", revision), "substantive block")
+        self.approve(filed)
+        self.assert_gate(1)
+
+    def test_legacy_refusal_words_do_not_classify_a_block(self):
+        revision = self.subject()
+        filed = self._commit(self.review("grills/block.md", "BLOCK", revision,
+                                        "\nVERDICT: REFUSED (GATE)\n"), "legacy refusal")
+        self.approve(filed)
+        self.assert_gate(1)
+
+    def test_refusal_same_revision_approval_is_not_later(self):
+        revision = self.subject()
+        self.refusal(revision)
+        self.approve(revision)
+        self.assert_gate(1)
+
+    def test_refusal_file_must_exist_at_approval_revision(self):
+        revision = self.subject()
+        later = self._commit({"grills/note.md": "later\n"}, "later revision without refusal")
+        self.refusal(revision)
+        self.approve(later)
+        self.assert_gate(1)
+
+    def test_refusal_file_bytes_must_match_at_approval_revision(self):
+        revision = self.subject()
+        filed = self.refusal(revision)
+        self.approve(filed)
+        changed = self.review("grills/refusal.md", "BLOCK", revision, self.REFUSAL)
+        changed["grills/refusal.md"] += "changed after approval\n"
+        self._commit(changed, "mutated refusal")
+        self.assert_gate(1)
+
+    def test_refusal_wrong_reviewer_cannot_resolve(self):
+        revision = self.subject()
+        before_refusal = self._commit({"grills/note.md": "later\n"}, "later revision")
+        filed = self.refusal(revision)
+        self.approve(before_refusal)
+        self.approve(filed, path="grills/ar.md", reviewer=self.AR)
+        self.assert_gate(1)
+
+    def test_refusal_stale_approval_cannot_resolve(self):
+        revision = self.subject()
+        filed = self.refusal(revision)
+        self.approve(filed)
+        self._commit({"foo.py": "x = 2\n"}, "post-review code")
+        self.assert_gate(1)
+
+    def test_refusal_nonancestor_approval_cannot_resolve(self):
+        revision = self.subject()
+        filed = self.refusal(revision)
+        self._branch("other")
+        other = self._commit({"grills/side.md": "side\n"}, "side commit")
+        self._git("checkout", "-q", "lane")
+        self.approve(other)
+        self.assert_gate(1)
+
+    def test_covering_approval_on_sibling_history_cannot_resolve(self):
+        self.subject()
+        self._branch("refusal-side")
+        reviewed = self._commit({"grills/side.md": "side\n"}, "refused revision")
+        self.refusal(reviewed)
+        self._git("checkout", "-q", "lane")
+        # The exact refusal bytes are present, and both revisions cover the
+        # eventual merge head, but the approval revision does not descend from
+        # the refusal revision. Mere inequality (or commit time) is insufficient.
+        copied = self.refusal(reviewed)
+        self.approve(copied)
+        self._git("-c", "user.email=fixture@example.invalid", "-c", "user.name=fixture",
+                  "-c", "commit.gpgsign=false", "merge", "--no-ff", "-m", "join reviews", "refusal-side")
+        self.assert_gate(1)
+
+    def test_refusal_disqualified_approval_cannot_resolve(self):
+        revision = self.subject()
+        filed = self.refusal(revision)
+        approval = self.approve(filed)
+        self.refusal(approval, "grills/refusal2.md")
+        out = self.assert_gate(1)
+        self.assertNotIn("resolves EXECUTION-REFUSAL", out)
+
+    def test_multiple_refusals_are_resolved_individually(self):
+        revision = self.subject()
+        first = self.refusal(revision)
+        second = self.refusal(first, "grills/refusal2.md")
+        self.approve(second)
+        self.assert_gate(0, ("grills/refusal.md", "grills/refusal2.md"))
+
+    def test_one_unresolved_refusal_keeps_multiple_refusals_blocked(self):
+        revision = self.subject()
+        first = self.refusal(revision)
+        self.refusal(revision, "grills/refusal2.md")
+        self.approve(first)  # contains the first refusal, but not the second
+        self.assert_gate(1)
+
+    def test_substantive_block_beside_resolved_refusal_still_blocks(self):
+        revision = self.subject()
+        self.refusal(revision)
+        filed = self._commit(self.review("grills/substantive.md", "BLOCK", revision), "finding")
+        self.approve(filed)
+        self.assert_gate(1)
+
+    def test_repair_then_fresh_approval_clears_substantive_block(self):
+        revision = self.subject()
+        self._commit(self.review("grills/substantive.md", "BLOCK", revision), "finding")
+        fixed = self._commit({"foo.py": "x = 2\n"}, "repair")
+        self.approve(fixed)
+        self.assert_gate(0)
+
+    def test_voided_block_never_revives_older_approval(self):
+        revision = self.subject()
+        approved = self.approve(revision)
+        self._commit(self.review("grills/substantive.md", "BLOCK", approved), "finding")
+        self._commit({"notes.md": "prose repair\n"}, "void block but not code approval")
+        # notes.md voids the SE approval above (covers=no), so an AR approval alone fails the gate.
+        self.approve(self._git("rev-parse", "HEAD"), "grills/ar.md", self.AR)
+        self.assert_gate(1)
+
+    def test_invalid_category_metadata_fails_closed(self):
+        revision = self.subject()
+        variants = [
+            "BLOCK-KIND: UNKNOWN\n", self.REFUSAL * 2,
+            "\n" + self.REFUSAL, " " + self.REFUSAL,
+            "BLOCK-KIND: execution-refusal\n", "BLOCK-KIND EXECUTION-REFUSAL\n",
+            "BLOCK-KIND:\n", "block-kind: EXECUTION-REFUSAL\n",
+            "\nbody\n" + self.REFUSAL,
+        ]
+        for category in variants:
+            with self.subTest(category=category):
+                filed = self._commit(self.review("grills/refusal.md", "BLOCK", revision, category),
+                                     "malformed category")
+                self.approve(filed)
+                self.assertIn("malformed stamp header", self.assert_gate(1))
+
+    def test_category_on_approve_is_contradictory(self):
+        revision = self.subject()
+        self._commit(self.review("grills/approve.md", "APPROVE", revision, self.REFUSAL), "contradiction")
+        self.assertIn("malformed stamp header", self.assert_gate(1))
+
+    def test_block_relabelled_after_filing_cannot_resolve(self):
+        revision = self.subject()
+        self._commit(self.review("grills/block.md", "BLOCK", revision), "substantive block")
+        relabelled = self._commit(self.review("grills/block.md", "BLOCK", revision, self.REFUSAL),
+                                  "relabel in place")
+        self.approve(relabelled)
+        self.assertNotIn("resolves EXECUTION-REFUSAL", self.assert_gate(1))
+
+    def test_block_relabelled_through_a_merge_cannot_resolve(self):
+        revision = self.subject()
+        self._branch("side")
+        self.refusal(revision, "grills/block.md")
+        self._git("checkout", "-q", "lane")
+        self._commit(self.review("grills/block.md", "BLOCK", revision), "substantive block")
+        # Path history follows the classified parent and hides the plain copy.
+        self._git("-c", "user.email=fixture@example.invalid", "-c", "user.name=fixture",
+                  "-c", "commit.gpgsign=false", "merge", "-q", "-X", "theirs", "--no-ff",
+                  "-m", "take classified copy", "side")
+        self.approve(self._git("rev-parse", "HEAD"))
+        self.assertNotIn("resolves EXECUTION-REFUSAL", self.assert_gate(1))
+
+    def test_block_dropped_by_a_merge_cannot_resolve(self):
+        revision = self.subject()
+        self._branch("side")
+        self._commit({"grills/side.md": "side\n"}, "side commit")
+        self._git("checkout", "-q", "lane")
+        self._commit(self.review("grills/block.md", "BLOCK", revision), "substantive block")
+        identity = ("-c", "user.email=fixture@example.invalid", "-c", "user.name=fixture",
+                    "-c", "commit.gpgsign=false")
+        self._git(*identity, "merge", "-q", "--no-ff", "--no-commit", "side")
+        self._git("rm", "-q", "grills/block.md")
+        self._git(*identity, "commit", "-q", "-m", "merge drops the block")
+        filed = self.refusal(self._git("rev-parse", "HEAD"), "grills/block.md")
+        self.approve(filed)
+        self.assertNotIn("resolves EXECUTION-REFUSAL", self.assert_gate(1))
+
+    def test_plain_copy_on_a_merged_side_cannot_resolve(self):
+        revision = self.subject()
+        self._branch("side")
+        self._commit(self.review("grills/block.md", "BLOCK", revision), "substantive block")
+        self._git("checkout", "-q", "lane")
+        self.refusal(revision, "grills/block.md")
+        # Only the second parent holds the plain copy; the merge keeps the refusal.
+        self._git("-c", "user.email=fixture@example.invalid", "-c", "user.name=fixture",
+                  "-c", "commit.gpgsign=false", "merge", "-q", "-X", "ours", "--no-ff",
+                  "-m", "keep classified copy", "side")
+        self.approve(self._git("rev-parse", "HEAD"))
+        self.assertNotIn("resolves EXECUTION-REFUSAL", self.assert_gate(1))
+
+    def test_review_body_may_discuss_the_field(self):
+        revision = self.subject()
+        path = "grills/approve.md"
+        review = self.review(path, "APPROVE", revision)
+        review[path] += ("Checked the BLOCK-KIND parser.\n\n"
+                         "    BLOCK-KIND: EXECUTION-REFUSAL\n")
+        self._commit(review, "approval discussing the protocol")
+        self.assert_gate(0)
+
+    def merge_base_branch(self):
+        self._git("checkout", "-q", "master")
+        self._commit({"base.txt": "base\n"}, "base moves")
+        self._git("checkout", "-q", "lane")
+        self._git("-c", "user.email=fixture@example.invalid", "-c", "user.name=fixture",
+                  "-c", "commit.gpgsign=false", "merge", "--no-ff", "-m", "base merge", "master")
+        return self._git("rev-parse", "HEAD")
+
+    def test_base_merge_does_not_repair_substantive_block(self):
+        revision = self.subject()
+        self._commit(self.review("grills/block.md", "BLOCK", revision), "substantive block")
+        self.approve(self.merge_base_branch())
+        self.assert_gate(1)
+
+    def test_audit_copy_does_not_repair_substantive_block(self):
+        revision = self.subject()
+        self._commit(self.review("grills/block.md", "BLOCK", revision), "substantive block")
+        audit = self._commit({"handoffs/auto/2026-10-31-abc-session-close-managed.md": "log\n"},
+                             "audit copy")
+        self.approve(audit)
+        self.assert_gate(1)
+
+
+class RefusalStampTests(ExecutionRefusalCases, unittest.TestCase):
+    _run = StampCheckTest._run
+    _run_inprocess = StampCheckTest._run_inprocess
+
+    def check(self):
+        return self._run("master", "lane")
+
+    def test_refusal_history_rev_list_failure_is_configuration_error(self):
+        revision = self.subject()
+        filed = self.refusal(revision)
+        self.approve(filed)
+        real_git = stamp_check._git
+        calls = []
+
+        def failing_history(*args):
+            if args[0] == "rev-list" and len(args) == 2 and ".." in args[1]:
+                calls.append(args)
+                return 128, "", "injected refusal-history failure"
+            return real_git(*args)
+
+        stamp_check._git = failing_history
+        try:
+            code, lines = self._run_inprocess("master", "lane")
+        finally:
+            stamp_check._git = real_git
+        out = "\n".join(lines)
+        self.assertTrue(calls, "refusal history walk was not reached")
+        self.assertEqual(2, code, out)
+        self.assertIn("injected refusal-history failure", out)
+        self.assertNotIn("RESULT: PASS", out)
+
+    def test_adversarial_reviewer_cannot_use_the_category(self):
+        self._branch("lane")
+        revision = self._commit({"notes.md": "prose\n"}, "prose")
+        filed = self._commit(self.review("grills/refusal.md", "BLOCK", revision,
+                                        self.REFUSAL, self.AR), "prose refusal")
+        self.approve(filed, reviewer=self.AR)
+        self.assertIn("malformed stamp header", self.assert_gate(1))
+
+    def test_refusal_survives_a_clean_base_merge(self):
+        revision = self.subject()
+        filed = self.refusal(revision)
+        self.approve(filed)
+        self.merge_base_branch()
+        self.assert_gate(0, ("grills/refusal.md",))
+
 
 if __name__ == "__main__":
     unittest.main()

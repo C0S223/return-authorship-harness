@@ -76,6 +76,20 @@ def _is_policy():
     return m.is_policy
 
 
+def _cloud_managed():
+    """True only in a managed cloud session (unlock_consume.cloud_boundary()).
+    Loaded here, on the startup path only, so the per-call import set stays
+    small; a load failure reads as not cloud (the host path is unchanged)."""
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "unlockconsume", os.path.join(HERE, "unlock_consume.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m.cloud_boundary() == "managed"
+    except Exception:
+        return False
+
+
 def log_line(msg):
     try:
         os.makedirs(LOG_DIR, exist_ok=True)
@@ -107,7 +121,7 @@ def roots():
 
 def candidates(root, deep):
     """Policy-shaped paths under one checkout root, absolute. `deep` adds the
-    tracked CLAUDE.md/AGENTS.md at any depth (one git call, baseline only)."""
+    tracked contracts at any depth, including repos/* checkouts (baseline only)."""
     for f in FILES:
         p = os.path.join(root, f)
         if os.path.isfile(p):
@@ -119,16 +133,44 @@ def candidates(root, deep):
             for f in fn:
                 yield os.path.join(dp, f)
     if deep:
+        yield from tracked_contracts(root)
+        repos = os.path.join(root, "repos")
         try:
-            import subprocess   # baseline only; keeps the per-call import set small
-            out = subprocess.run(
-                ["git", "-C", root, "ls-files", "-z", "--", "*CLAUDE.md", "*AGENTS.md", "*AGENTS.override.md"],
-                capture_output=True, timeout=10).stdout
-            for rel in out.decode("utf-8", "replace").split("\0"):
-                if rel and os.path.isfile(os.path.join(root, rel)):
-                    yield os.path.join(root, rel)
-        except Exception:
-            pass
+            children = sorted(os.listdir(repos))
+        except OSError:
+            children = []
+        for name in children:
+            child = os.path.join(repos, name)
+            # .git can be a directory or a worktree/submodule gitfile. Without
+            # it, git -C could silently use the enclosing harness's index.
+            if os.path.isdir(child) and os.path.exists(os.path.join(child, ".git")):
+                # Contracts only: a child's hooks/config are its own policy.
+                yield from tracked_contracts(child, report_failure=True)
+
+
+def tracked_contracts(root, report_failure=False):
+    """Tracked contracts from one index; never walk the checkout's policy dirs."""
+    try:
+        import subprocess   # baseline only; keeps the per-call import set small
+        # fsmonitor=false: a child's own core.fsmonitor would otherwise run its
+        # script from this hook.
+        result = subprocess.run(
+            ["git", "-c", "core.fsmonitor=false", "-C", root, "ls-files", "-z", "--", "*CLAUDE.md", "*AGENTS.md", "*AGENTS.override.md"],
+            capture_output=True, timeout=10)
+        if result.returncode != 0:
+            if report_failure:
+                err = result.stderr.decode("utf-8", "replace").strip().splitlines()
+                log_line("NOT-BASELINED %s: git ls-files failed rc=%d: %s"
+                         % (safe(relroot(root)), result.returncode,
+                            safe(err[0] if err else "no stderr")))
+            return
+        for rel in result.stdout.decode("utf-8", "replace").split("\0"):
+            if rel and os.path.isfile(os.path.join(root, rel)):
+                yield os.path.join(root, rel)
+    except Exception as e:
+        if report_failure:
+            log_line("NOT-BASELINED %s: git ls-files failed: %s"
+                     % (safe(relroot(root)), safe(str(e))))
 
 
 def sha(p):
@@ -245,6 +287,36 @@ def origin_default(root):
         return None
 
 
+def set_origin_head(root):
+    """Managed cloud only: the environment setup script runs before the clone,
+    so refs/remotes/origin/HEAD starts unset and every gate refuses pushes.
+    Set it with `git remote set-head origin --auto` when it is unset or
+    dangling (origin_default's test); never move a ref that is set. Runs inside
+    this hook's startup path BEFORE the baseline, so the baseline holds the new
+    ref (SessionStart hooks run in parallel; a sibling hook would race it).
+    Bounded (5 s, under the hook's 10 s) and quiet: on any failure the ref
+    stays unset and session-start.sh's `unknown` line still prints. One log
+    line says which."""
+    import subprocess
+    try:
+        if not _cloud_managed() or origin_default(root) is not None:
+            return
+        env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+        r = subprocess.run(["git", "-C", root, "remote", "set-head", "origin", "--auto"],
+                           capture_output=True, text=True, timeout=5,
+                           stdin=subprocess.DEVNULL, env=env)
+        ref = origin_default(root)
+        if r.returncode == 0 and ref:
+            log_line("origin/HEAD was unset; set to %s (git remote set-head origin --auto)"
+                     % safe(ref))
+        else:
+            err = (r.stderr or r.stdout or "").strip().splitlines()
+            log_line("origin/HEAD was unset; set-head origin --auto failed rc=%d: %s"
+                     % (r.returncode, safe(err[0] if err else "no output")))
+    except Exception as e:
+        log_line("origin/HEAD was unset; set-head origin --auto failed: %s" % safe(str(e)))
+
+
 def on_master(root, rel, digest):
     """True when the file's bytes (sha256
     `digest`) are exactly what a checkout of `<origin default>:<rel>` writes --
@@ -257,11 +329,16 @@ def on_master(root, rel, digest):
     `.gitattributes` is not watched, so an `eol=crlf` line appended there
     re-opened F1. `.git/info/attributes` and `.git/config` are watched.
     The default branch is origin/HEAD's target, never a guessed name.
+    Contracts under repos/<child>/ never read MERGED: a child's config,
+    attributes and remote-tracking refs are unwatched and ungated, so a
+    pull there reads UNGRANTED, and no git command runs in the child.
     ponytail: trusts the local remote-tracking refs and the user- and
     system-level git config and attributes files outside the tree; a local write of
     refs/remotes/origin/HEAD's target, or of those, forges it. A move of origin/HEAD
     itself is recorded here (FILES) and denied by git-guard."""
     import hashlib, subprocess   # uncovered differences only; never on the no-op path
+    if rel.startswith("repos/"):
+        return False
     ref = origin_default(root)
     if ref is None:
         return False
@@ -484,6 +561,7 @@ def main():
             # change a skipped or crashed compare left unrecorded
             compare(sid, _is_policy())
         else:
+            set_origin_head(ROOT)
             take_baseline(sid, _is_policy(), src)
         return
     if (data.get("tool_name") or "") not in WRITERS:

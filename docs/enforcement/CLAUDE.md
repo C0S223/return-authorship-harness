@@ -6,7 +6,7 @@ Supplement to root `CLAUDE.md` §8.
 The adapter shares these predicates; Claude statuses below do not prove Codex activation.
 
 ## Coverage and verification
-**`live` means wired and firing, not complete coverage.** Mark a cell live only in the policy edit that records the probe proving it on that target. Known bypasses are tracked as open items, not deferred protections.
+**`live` means wired and firing, not complete coverage.** Mark a cell live only in the edit that records its probe. Known bypasses are tracked as open items, not deferred protections.
 **Three targets, per-target Status columns.** Words: **live** probed there · **wired** configured, not yet probed in this tree · **unarmed** ships a placeholder (`OWNER/REPO`); installed, it refuses every push, uninstalled nothing runs · **cloud-off** exits 0 under the boundary marker (`unlock_consume.cloud_boundary()`) · **unregistered** no tool name arrives · **prose** no mechanism, the rule binds as text. **Status: working once Python is present; a live probe is a setup step (`SETUP.md`). Until one lands, cells read wired or prose and `ask` rows are advisory (root §8).**
 **Table and `scripts/test_gate_decisions.py` disagree → table is wrong.**
 **Layer:** L0 root §2 **Denied** (settings deny) · L1 hook-gated, ask or deny per cell · L2 prose only · L3 root §5 charter · CI GitHub check on the PR, every target · — not a rule class.
@@ -19,7 +19,7 @@ The adapter shares these predicates; Claude statuses below do not prove Codex ac
 | Shell writes outside tree | L1 | shell-scope (`--log` is log-escape's trail) | wired (ask) | cloud-off (`--log` only; blind inside script bodies) | cloud-off |
 | Spawn roster | L1 | spawn-roster + catchall deny | wired (deny) | wired | wired |
 | Git never-items | L1 | git-guard · pre-push (refuses the default branch when `CLAUDECODE` is set) · repo ruleset (PR landing row) | git-guard wired; pre-push **unarmed** (`APPROVED_ORIGIN_URL`) until setup | git-guard wired; pre-push **unarmed** (`APPROVED_ORIGIN_URL`, `REPO_MATCH`) until setup | git-guard wired; pre-push **unarmed** (`APPROVED_ORIGIN_URL`) until setup |
-| PR landing: `gate` = stamp + suite, `operator-merge` = policy path | CI | `ci.yml` (`pull_request_target`; the default branch's `stamp_check` and `ci_policy_check`, the PR's suite only for a head in this repository; actions pinned by sha); a ruleset the operator sets requires both jobs | wired; binds only identities the ruleset does not exempt, so an admin push bypasses it | same | same |
+| PR landing: `gate` = stamp + suite, `operator-merge` = policy path | CI | `ci.yml` (`pull_request_target`; the default branch's `stamp_check` and `ci_policy_check`, the PR's suite only for a head in this repository; actions pinned by sha); a ruleset the operator sets requires both jobs; `.github/CODEOWNERS` binds only once the operator's ruleset sets `require_code_owner_review` | wired; binds only identities the ruleset does not exempt, so an admin push bypasses it | same | same |
 | Non-loopback shell sends | L1 | net-post + `auth-net` | wired (deny) | cloud-off (platform egress control) | cloud-off (sidecar allowlist) |
 | Global env / installs | L1 | env-global + `auth-env` | wired (deny) | cloud-off (VM absorbs) | cloud-off (container absorbs) |
 | Escape audit trail | L1 | log-escape | wired (records; needs `jq`) | wired | wired |
@@ -31,10 +31,10 @@ The adapter shares these predicates; Claude statuses below do not prove Codex ac
 Session-close copies escape, grant, integrity and `peer-` lines into tracked `handoffs/auto/` only at a cloud closeout (flag `.agent-log/closeout-requested`, 2 h), never counting them as stranded; only committed lines survive.
 
 ## Setup per target
-Placeholders ship unarmed (`APPROVED_ORIGIN_URL` in `.githooks/pre-push`; `REPO_MATCH` in `scripts/cloud-setup.sh` arms no checkout); arming each is a policy edit. Steps for Windows, macOS/Linux, managed cloud and self-hosted: `SETUP.md`.
+Placeholders ship unarmed (`APPROVED_ORIGIN_URL` in `.githooks/pre-push`; `REPO_MATCH` in `scripts/cloud-setup.sh` arms no checkout); arming each is a policy edit. Steps per target: `SETUP.md`.
 
 ## Policy paths
-Paths, at every checkout root (the tree root and each `worktrees/<n>/`): `CLAUDE.md`, `AGENTS.md` and `AGENTS.override.md` at any depth, root `README.md`, `.claude/settings*.json`, `.claude/keybindings.json`, `.claude/hooks/**`, `.claude/agents/**`, `.codex/**`, `.agents/skills/**`, `.git/config|hooks|info|refs`, `.githooks/**` and `tools/git-hooks/**` (the pre-push hook's tracked sources), `roles/**` and `graphs/**`, edits to existing `skills/`/`scripts/`/`templates/` files, `.claude/` ones included, and `goals/OBJECTIVES.md` where a checkout carries one. Redirects/tee count. CI's `ci_policy_check` also gates `.github/**`, `CODEX-SETUP.md` and `docs/codex-enforcement.md`.
+Paths, at every checkout root (the tree root and each `worktrees/<n>/`): `CLAUDE.md`, `AGENTS.md` and `AGENTS.override.md` at any depth, root `README.md`, `.claude/settings*.json`, `.claude/keybindings.json`, `.claude/hooks/**`, `.claude/agents/**`, `.codex/**`, `.agents/skills/**`, `.git/config|hooks|info|refs`, `.githooks/**` and `tools/git-hooks/**`, `roles/**` and `graphs/**`, edits to existing `skills/`/`scripts/`/`templates/` files, `.claude/` ones included, and `goals/OBJECTIVES.md` where a checkout carries one. Redirects/tee count. CI also gates `.github/**`, `CODEX-SETUP.md`, `docs/codex-enforcement.md` and new or deleted `.claude/skills/**`.
 **Grant mechanism** (task-lived): `auth-policy <path>` or `auth-policy-batch <p1> ... <p8>`, typed as the whole of a new user turn, arms a grant for the named paths only, keyed to the session id; each allowed hit writes one `unlock-consumed` line, policy-integrity's credit for one difference until the grant ends. Only UNGRANTED differences alert. The grant ends at the first of: a new session, `revoke-policy` typed alone, a new unlock (either verb replaces all grants), or 8 h after arming. `auth-net` and `auth-env` stay one-shot.
 
 ## Roster maintenance

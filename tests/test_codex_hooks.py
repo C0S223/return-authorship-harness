@@ -5,6 +5,7 @@ Git default ref, and sends documented JSON envelopes directly to the dispatcher.
 The client trust/runtime itself is deliberately not simulated or called proven.
 """
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -164,9 +166,15 @@ class CodexHooks(unittest.TestCase):
                 '*** Begin Patch\n*** Add File: notes.txt\n+x\n*** Add File: CLAUDE.md\n+x\n*** End Patch']:
             self.denied(self.pre('apply_patch', {'command': command}))
         self.denied(self.pre('apply_patch', self.patch('../outside.txt')))
-        (self.root / 'link').symlink_to(self.root.parent, target_is_directory=True)
-        self.denied(self.pre('apply_patch', self.patch('link/outside.txt')))
         self.denied(self.pre('apply_patch', self.patch('.agents/skills/new/SKILL.md')))
+        # Last, and alone in its subTest: where Windows refuses symlinks
+        # (WinError 1314, Developer Mode off) only this check skips.
+        with self.subTest('a symlink out of the root'):
+            try:
+                (self.root / 'link').symlink_to(self.root.parent, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest('cannot create symlinks here: %s' % exc)
+            self.denied(self.pre('apply_patch', self.patch('link/outside.txt')))
 
     def test_patch_headers_inside_content_are_data(self):
         self.allowed(self.pre('apply_patch', self.patch('notes.txt', '*** Update File: CLAUDE.md')))
@@ -285,6 +293,362 @@ class CodexHooks(unittest.TestCase):
         result = subprocess.run(command, capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('dirty', result.stderr)
+
+    # Compaction ends grants.
+    # Adapter proofs only: the client's own compaction behaviour is unprobed.
+    NET = ('auth-net example.invalid', {'command': 'curl -X POST https://example.invalid'})
+    ENV = ('auth-env', {'command': 'npm install -g package'})
+    AGENT_ARGS = {'id': 'child-123', 'message': 'Review the bounded repair.', 'interrupt': False}
+
+    def log(self):
+        return ''.join(p.read_text() for p in sorted((self.root / '.agent-log').glob('*.md')))
+
+    def grant_file(self, stem, sid=None):
+        hashed = 'codex-' + hashlib.sha256((sid or self.sid).encode()).hexdigest()
+        return self.root / '.agent-log' / ('%s-unlock-%s.json' % (stem, hashed))
+
+    def compact(self, sid=None):
+        data = self.envelope('SessionStart', source='compact')
+        if sid is not None:
+            data['session_id'] = sid
+        return self.invoke(data)
+
+    def precompact(self, sid=None, trigger='manual'):
+        data = self.envelope('PreCompact', trigger=trigger, turn_id='t1')
+        if sid is not None:
+            data['session_id'] = sid
+        proc = subprocess.run([sys.executable, str(self.script)], input=json.dumps(data),
+                              capture_output=True, text=True, cwd=self.root, timeout=15)
+        return proc
+
+    def arm_agent(self):
+        reason = self.denied(self.pre('send_input', self.AGENT_ARGS))
+        self.prompt('auth-agent ' + reason.rsplit('auth-agent ', 1)[1])
+
+    def arm_all(self, sid=None):
+        old, self.sid = self.sid, sid or self.sid
+        try:
+            self.prompt('auth-policy CLAUDE.md')
+            self.prompt(self.NET[0])
+            self.prompt(self.ENV[0])
+            self.arm_agent()
+        finally:
+            self.sid = old
+
+    def assert_all_refused(self, sid=None):
+        self.denied(self.pre('apply_patch', self.patch('CLAUDE.md'), sid=sid))
+        self.denied(self.pre(args=self.NET[1], sid=sid))
+        self.denied(self.pre(args=self.ENV[1], sid=sid))
+        self.denied(self.pre('send_input', self.AGENT_ARGS, sid=sid))
+
+    def lock_grants(self):
+        """(f1) shape: unlink and overwrite fail, appending to the day log works."""
+        if os.geteuid() == 0:
+            self.skipTest('running as root: chmod does not bind, so revocation failure cannot be staged')
+        logdir = self.root / '.agent-log'
+        day = logdir / (time.strftime('%Y-%m-%d') + '.md')
+        day.touch()
+        os.chmod(day, 0o600)
+        files = [p for p in logdir.iterdir() if p.name.endswith('.json')]
+        for p in files:
+            os.chmod(p, 0o400)
+        os.chmod(logdir, 0o500)
+        def restore():
+            os.chmod(logdir, 0o700)
+            for p in files:
+                os.chmod(p, 0o600)
+        self.addCleanup(restore)
+        return restore
+
+    def test_compact_revokes_this_sessions_policy_grant(self):          # (a)
+        self.prompt('auth-policy CLAUDE.md')
+        self.allowed(self.pre('apply_patch', self.patch('CLAUDE.md')))
+        self.compact()
+        self.assertFalse(self.grant_file('policy').exists())
+        hashed = self.grant_file('policy').name[len('policy-unlock-'):-len('.json')]
+        self.assertRegex(self.log(), r'unlock-revoked \(policy\): 1 path\(s\) sid=' + hashed)
+        self.assertIn('unlock-revoked sid=%s policy compaction' % hashed, self.log())
+        self.denied(self.pre('apply_patch', self.patch('CLAUDE.md')))
+
+    def test_compact_leaves_other_sessions_grants(self):                # (b)
+        self.arm_all(sid='session-b')
+        self.compact()
+        self.allowed(self.pre('apply_patch', self.patch('CLAUDE.md'), sid='session-b'))
+        self.allowed(self.pre(args=self.NET[1], sid='session-b'))
+
+    def test_other_session_start_sources_leave_grants(self):            # (c)
+        self.prompt('auth-policy CLAUDE.md')
+        for source in ('startup', 'resume', 'clear', 'fork'):
+            with self.subTest(source=source):
+                self.invoke(self.envelope('SessionStart', source=source))
+                self.allowed(self.pre('apply_patch', self.patch('CLAUDE.md')))
+        self.assertNotIn('unlock-revoked', self.log())
+
+    def test_compact_spends_net_env_and_agent_grants(self):             # (d)
+        self.arm_all()
+        self.compact()
+        for stem in ('net', 'env', 'agent'):
+            self.assertEqual(json.loads(self.grant_file(stem).read_text()), {'used': True}, stem)
+        self.assert_all_refused()
+
+    def test_compact_without_grants_writes_no_revoke_line(self):        # (e)
+        self.compact()
+        self.assertIn('startup sid=', self.log())
+        self.assertNotIn('unlock-revoke', self.log())
+
+    def test_failed_revoke_is_still_refused_at_use(self):               # (f1)
+        self.prompt('auth-policy CLAUDE.md')
+        self.lock_grants()
+        proc = subprocess.run([sys.executable, str(self.script)],
+                              input=json.dumps(self.envelope('SessionStart', source='compact')),
+                              capture_output=True, text=True, cwd=self.root, timeout=15)
+        self.assertIn('unlock-revoke-failed', self.log())
+        self.assertRegex(self.log(), r'\[codex\] startup sid=\S+ compact epoch:\d+\.\d+\n')
+        self.assertTrue(self.grant_file('policy').exists(), 'fixture failed to stage a failed unlink')
+        self.assertIn('revoke-policy', proc.stdout + proc.stderr)
+        self.denied(self.pre('apply_patch', self.patch('CLAUDE.md')))
+
+    def test_no_revival_after_permissions_recover(self):                # (f2)
+        self.prompt('auth-policy CLAUDE.md')
+        restore = self.lock_grants()
+        subprocess.run([sys.executable, str(self.script)],
+                       input=json.dumps(self.envelope('SessionStart', source='compact')),
+                       capture_output=True, text=True, cwd=self.root, timeout=15)
+        restore()
+        grant = json.loads(self.grant_file('policy').read_text())
+        self.assertFalse(grant.get('used'), 'old grant must be intact for this proof')
+        self.denied(self.pre('apply_patch', self.patch('CLAUDE.md')))
+        time.sleep(1.1)   # a grant armed in the compaction's own second counts as before it
+        self.prompt('auth-policy CLAUDE.md')
+        self.allowed(self.pre('apply_patch', self.patch('CLAUDE.md')))
+
+    def test_failed_revoke_of_net_env_agent_stays_refused(self):        # (f3)
+        self.arm_all()
+        restore = self.lock_grants()
+        subprocess.run([sys.executable, str(self.script)],
+                       input=json.dumps(self.envelope('SessionStart', source='compact')),
+                       capture_output=True, text=True, cwd=self.root, timeout=15)
+        for stem in ('net', 'env', 'agent'):
+            self.assertIn('unlock-revoke-failed sid=', self.log())
+            self.assertFalse(json.loads(self.grant_file(stem).read_text()).get('used'), stem)
+        self.assert_all_refused()
+        restore()
+        self.assert_all_refused()
+
+    def test_missing_compact_source_is_still_refused(self):             # (g)
+        proc = subprocess.run([sys.executable, str(self.script)],
+                              input=json.dumps(self.envelope('SessionStart')),
+                              capture_output=True, text=True, cwd=self.root, timeout=15)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn('unknown session-start source', proc.stderr)
+
+    def test_precompact_revokes_and_does_not_block(self):               # (h1)
+        self.arm_all()
+        self.arm_all(sid='session-b')
+        proc = self.precompact()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn('"continue"', proc.stdout)
+        self.assertFalse(self.grant_file('policy').exists())
+        for stem in ('net', 'env', 'agent'):
+            self.assertEqual(json.loads(self.grant_file(stem).read_text()), {'used': True}, stem)
+            self.assertIn('%s pre-compact' % stem, self.log())
+        self.assert_all_refused()
+        self.assertTrue(self.grant_file('policy', 'session-b').exists())
+        self.allowed(self.pre('apply_patch', self.patch('CLAUDE.md'), sid='session-b'))
+
+    def test_precompact_refuses_when_revocation_fails(self):            # (h2)
+        self.prompt('auth-policy CLAUDE.md')
+        self.lock_grants()
+        proc = self.precompact()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)['continue'], False)
+        self.assertIn('compaction refused', json.loads(proc.stdout)['stopReason'])
+
+    def test_precompact_refuses_when_only_the_tombstone_fails(self):    # (h2, integrity healthy)
+        # Under (f1) permissions policy-integrity itself fails first; this
+        # case reaches the revocation step with integrity working.
+        if os.geteuid() == 0:
+            self.skipTest('running as root: chmod does not bind')
+        self.prompt(self.NET[0])
+        os.chmod(self.grant_file('net'), 0o400)
+        self.addCleanup(os.chmod, self.grant_file('net'), 0o600)
+        proc = self.precompact()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)['continue'], False)
+        self.assertIn('unlock-revoke-failed sid=', self.log())
+        self.assertIn('[codex] precompact sid=', self.log())
+
+    def test_precompact_unexpected_exception_refuses(self):             # (h3)
+        self.prompt('auth-policy CLAUDE.md')
+        (self.root / '.claude/hooks/policy-integrity.py').write_text('raise RuntimeError("injected")\n')
+        proc = self.precompact(trigger='auto')
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(json.loads(proc.stdout), {'continue': False, 'stopReason':
+                         'codex-harness: grant revocation could not be recorded; compaction refused'})
+
+    def test_precompact_without_grants_only_audits(self):               # (h4)
+        proc = self.precompact()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout.strip(), '')
+        self.assertRegex(self.log(), r'\[codex\] precompact sid=\S+ manual')
+        self.assertNotIn('unlock-revoke', self.log())
+
+    # Repair round 1: the cutoff comes from the record's epoch, not wall-clock text.
+    def dispatcher(self):
+        """The candidate dispatcher imported in-process, with env and TZ restored."""
+        saved_env = dict(os.environ)
+        def restore():
+            os.environ.clear(); os.environ.update(saved_env)
+            if hasattr(time, 'tzset'):
+                time.tzset()
+        self.addCleanup(restore)
+        spec = importlib.util.spec_from_file_location('codex_dispatch_fixture', self.script)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def tz(self, name):
+        if not hasattr(time, 'tzset'):
+            self.skipTest('time.tzset is unavailable on this platform')
+        os.environ['TZ'] = name
+        time.tzset()
+
+    def at(self, module, epoch, tz=None):
+        if tz is not None:
+            self.tz(tz)
+        return mock.patch.object(module.time, 'time', return_value=epoch)
+
+    def write_grant(self, module, stem, epoch, sid=None):
+        hashed = 'codex-' + hashlib.sha256((sid or self.sid).encode()).hexdigest()
+        path = module.grant_path(stem, hashed)
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps({'epoch': epoch, 'used': False}))
+        return hashed
+
+    def test_dst_fall_back_hour_cutoff_is_not_an_hour_early(self):
+        d = self.dispatcher()
+        second_0130 = 1793514600.0   # 2026-11-01 06:30:00Z = 01:30 EST, the SECOND 01:30 in New York
+        hashed = self.write_grant(d, 'policy', second_0130 - 1200)   # armed 20 min earlier
+        with self.at(d, second_0130, 'America/New_York'):
+            self.assertEqual(time.strftime('%H:%M %Z', time.localtime(second_0130)), '01:30 EST')
+            # The record a failed revoke leaves (f1 shape): only the line, the grant file intact.
+            d.audit(hashed, 'startup', 'compact', stamp=True)
+        with self.at(d, second_0130 + 60):
+            self.assertEqual(d.stale_grants(hashed), {'policy'})
+        self.write_grant(d, 'policy', second_0130 + 5)
+        with self.at(d, second_0130 + 60):
+            self.assertEqual(d.stale_grants(hashed), set(), 'a grant armed after the compaction is fresh')
+
+    def test_tz_change_between_record_and_use(self):
+        d = self.dispatcher()
+        compacted = 1793995200.0     # 2026-11-06 20:00Z: Tokyo 11-07, New York 11-06
+        hashed = self.write_grant(d, 'net', compacted - 600)
+        with self.at(d, compacted, 'Asia/Tokyo'):
+            d.audit(hashed, 'startup', 'compact', stamp=True)
+        self.assertTrue((self.root / '.agent-log' / '2026-11-07.md').exists())
+        with self.at(d, compacted + 60, 'America/New_York'):
+            self.assertEqual(d.stale_grants(hashed), {'net'})
+            self.write_grant(d, 'net', compacted + 5)
+            self.assertEqual(d.stale_grants(hashed), set())
+
+    def test_record_in_yesterdays_log_still_counts(self):
+        d = self.dispatcher()
+        compacted = 1793853000.0     # 2026-11-04 23:30 EST (04:30Z on 11-05)
+        hashed = self.write_grant(d, 'env', compacted - 600)
+        with self.at(d, compacted, 'America/New_York'):
+            d.audit(hashed, 'startup', 'compact', stamp=True)
+        self.assertTrue((self.root / '.agent-log' / '2026-11-04.md').exists())
+        with self.at(d, compacted + 3600):  # 00:30 on 11-05
+            self.assertEqual(time.strftime('%Y-%m-%d', time.localtime(compacted + 3600)), '2026-11-05')
+            self.assertEqual(d.stale_grants(hashed), {'env'})
+
+    def test_audit_takes_day_and_time_from_one_clock_read(self):
+        d = self.dispatcher()
+        reads = iter([1793854799.9, 1793854800.1])   # 23:59:59.9 then 00:00:00.1 on 11-04/05 New York
+        self.tz('America/New_York')
+        with mock.patch.object(d.time, 'time', side_effect=lambda: next(reads)):
+            d.audit('codex-x', 'startup', 'compact', stamp=True)
+        line = (self.root / '.agent-log' / '2026-11-04.md').read_text()
+        self.assertIn('- 23:59:59 [codex] startup sid=codex-x compact epoch:1793854799.9', line)
+
+    def test_unreadable_log_refuses_every_sessions_grants(self):
+        if os.geteuid() == 0:
+            self.skipTest('running as root: chmod does not bind')
+        d = self.dispatcher()
+        now = time.time()
+        mine = self.write_grant(d, 'policy', now)
+        other = self.write_grant(d, 'policy', now, sid='never-compacted')
+        day = self.root / '.agent-log' / (time.strftime('%Y-%m-%d') + '.md')
+        day.write_text('')
+        os.chmod(day, 0o000)
+        self.addCleanup(os.chmod, day, 0o600)
+        self.assertEqual(d.stale_grants(mine), {'policy'})
+        self.assertEqual(d.stale_grants(other), {'policy'})
+
+    def test_legacy_record_without_epoch_refuses_conservatively(self):
+        d = self.dispatcher()
+        now = time.time()
+        hashed = self.write_grant(d, 'policy', now + 5)
+        day = self.root / '.agent-log' / (time.strftime('%Y-%m-%d') + '.md')
+        day.write_text('- %s [codex] startup sid=%s compact\n' % (time.strftime('%H:%M:%S'), hashed))
+        self.assertEqual(d.stale_grants(hashed), {'policy'}, 'even a fresh grant is refused')
+
+    # Repair round 2: the 26 h offset spread (UTC-12 .. UTC+14).
+    def test_utc_plus_14_record_seen_from_utc_minus_12_midnight(self):
+        d = self.dispatcher()
+        consumer = 1793881800.0      # 2026-11-05 12:30Z = 00:30 on 11-05 at UTC-12
+        recorded = consumer - 600    # 12:20Z = 02:20 on 11-06 at UTC+14
+        hashed = self.write_grant(d, 'policy', recorded - 600)
+        with self.at(d, recorded, 'Pacific/Kiritimati'):
+            d.audit(hashed, 'startup', 'compact', stamp=True)
+        self.assertTrue((self.root / '.agent-log' / '2026-11-06.md').exists())
+        with self.at(d, consumer, 'Etc/GMT+12'):   # POSIX sign: Etc/GMT+12 is UTC-12
+            self.assertEqual(time.strftime('%Y-%m-%d %H:%M', time.localtime(consumer)), '2026-11-05 00:30')
+            self.assertEqual(d.stale_grants(hashed), {'policy'})
+
+    def test_utc_minus_12_legacy_record_seen_from_utc_plus_14(self):
+        d = self.dispatcher()
+        consumer = 1793881800.0
+        recorded = consumer - 7 * 3600   # seven hours old
+        self.tz('Etc/GMT+12')
+        local = time.localtime(recorded)
+        hashed = self.write_grant(d, 'policy', consumer - 60)
+        (self.root / '.agent-log' / (time.strftime('%Y-%m-%d', local) + '.md')).write_text(
+            '- %s [codex] startup sid=%s compact\n' % (time.strftime('%H:%M:%S', local), hashed))
+        with self.at(d, consumer, 'Pacific/Kiritimati'):
+            self.assertEqual(d.stale_grants(hashed), {'policy'}, 'legacy record could be in the window')
+
+    def test_forty_hour_old_legacy_record_does_not_block_a_fresh_grant(self):
+        d = self.dispatcher()
+        now = time.time()
+        old = time.localtime(now - 40 * 3600)
+        hashed = self.write_grant(d, 'policy', now)
+        (self.root / '.agent-log' / (time.strftime('%Y-%m-%d', old) + '.md')).write_text(
+            '- %s [codex] startup sid=%s compact\n' % (time.strftime('%H:%M:%S', old), hashed))
+        self.assertEqual(d.stale_grants(hashed), set())
+
+    def test_record_and_unlink_both_fail_says_revocation_not_assured(self):
+        if os.geteuid() == 0:
+            self.skipTest('running as root: chmod does not bind')
+        d = self.dispatcher()
+        hashed = self.write_grant(d, 'policy', time.time())
+        logdir = self.root / '.agent-log'
+        os.chmod(d.grant_path('policy', hashed), 0o400)
+        os.chmod(logdir, 0o500)
+        self.addCleanup(os.chmod, logdir, 0o700)
+        with mock.patch.object(d, 'audit', side_effect=OSError('day log unwritable')):
+            text = d.compaction_tidy(hashed)
+        self.assertTrue(d.grant_path('policy', hashed).exists(), 'fixture must fail the unlink')
+        self.assertIn('revocation is not assured', text)
+        self.assertNotIn('still refused at use', text)
+
+    def test_non_finite_grant_epoch_is_stale(self):
+        d = self.dispatcher()
+        now = time.time()
+        hashed = 'codex-' + hashlib.sha256(self.sid.encode()).hexdigest()
+        d.audit(hashed, 'startup', 'compact', stamp=True)
+        d.grant_path('policy', hashed).write_text('{"epoch": Infinity, "used": false}')
+        self.assertEqual(d.stale_grants(hashed), {'policy'})
 
     def test_missing_launcher_target_exits_two(self):
         launcher = self.root / '.codex/hooks/launch.sh'

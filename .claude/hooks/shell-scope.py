@@ -36,6 +36,13 @@ ROOTS = [os.path.normcase(os.path.realpath(p)) for p in TREE]
 # The scratchpad, the same exception filetool-scope carries: <tmp>/claude or
 # <tmp>/claude-<suffix> (a cloud session's is /tmp/claude-<uid>/...).
 TMP = os.path.normcase(os.path.realpath(tempfile.gettempdir()))
+# Claude Code keeps its scratchpad at /tmp/claude-<uid>/... even where TMPDIR
+# points elsewhere (macOS: /var/folders/.../T), so on POSIX that ONE directory,
+# for this user's uid only, is scratch too. Without it every scratchpad write
+# on a Mac host asked for every command.
+UID_SCRATCH = (os.path.normcase(os.path.join(os.path.realpath("/tmp"),
+                                             "claude-%d" % os.getuid()))
+               if hasattr(os, "getuid") else None)
 NULLS = {"nul", "/dev/null"}
 
 # fd-prefixed redirects included: 2> file writes stderr to file
@@ -123,6 +130,8 @@ def norm(p, cwd):
 
 
 def in_tree(np):
+    if UID_SCRATCH and (np == UID_SCRATCH or np.startswith(UID_SCRATCH + os.sep)):
+        return True
     if np.startswith(TMP + os.sep):
         top = np[len(TMP) + 1:].split(os.sep, 1)[0]
         if top == "claude" or top.startswith("claude-"):

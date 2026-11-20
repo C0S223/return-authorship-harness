@@ -57,7 +57,16 @@ verbatim in your verdict block, and verify it yourself with `git rev-parse` and
     REVISION: <40 lowercase hex>
 
 then one blank line, then your review unchanged. `STAMP` is `APPROVE` iff your `VERDICT` is
-`NO-FINDINGS-CONFIRMED`; anything else is `BLOCK`. `REVISION` is the sha you verified above,
+`NO-FINDINGS-CONFIRMED`; anything else is `BLOCK`. Only when a BLOCK is caused solely by
+inability to perform required execution and has no surviving substantive findings, insert
+the exact fourth header line `BLOCK-KIND: EXECUTION-REFUSAL` before the blank line. This
+does not approve the work. Missing category remains an ordinary BLOCK; never infer one
+from refusal prose or edit a prior review to add it. The field name is reserved throughout
+the review: invalid, duplicate, misplaced metadata or a category on APPROVE fails the gate.
+A subsequent independently covering same-kind APPROVE can resolve that refusal only at
+a strict descendant revision already containing the unchanged refusal file. A superseded
+APPROVE cannot resolve it; substantive BLOCKs retain their existing protection.
+`REVISION` is the sha you verified above,
 in full 40-hex form (`git rev-parse <sha>`) — never an abbreviation, even when the order gave
 one. `scripts/stamp_check.py` parses these lines verbatim, and CI runs the default branch's
 copy of it as check (b) inside `gate` on every PR (`.github/workflows/ci.yml`): a stray

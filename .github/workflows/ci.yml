@@ -12,8 +12,11 @@
 # On a draft both jobs fail at their first step, so a draft's
 # required checks read red, never passing. (b) and (c) still start on a draft
 # (`!cancelled()`) but fail at once: no checkout ran, so head/ does not exist.
-# ready_for_review runs the jobs on the code that will merge; a draft push
-# costs only a job start.
+# (c) runs on the merge result: the base's commit (github.sha, the one base/
+# holds) merged into head/, so a head behind the base still runs the base's
+# tests, and a head that does not merge cleanly fails (c). That merge is as of
+# the run; a base that moves later is not retested until the PR's next run.
+# A draft push costs only a job start.
 # NEVER ADD A CACHE (actions/cache, setup-python `cache:`): under
 # pull_request_target the PR's code would run inside the base's cache scope, and
 # a poisoned cache is a gate edit by another door.
@@ -95,11 +98,19 @@ jobs:
           python ../base/scripts/stamp_check.py --base "origin/$DEFAULT_BRANCH" --head "$HEAD_REF" || rc=$?
           echo "- (b) stamp gate: $([ "$rc" -eq 0 ] && echo PASS || echo "FAIL (exit $rc)")" >> "$GITHUB_STEP_SUMMARY"
           exit "$rc"
-      - name: (c) suite, the PR's own runner
+      - name: (c) suite, the PR's own runner on its merge with the base
         id: suite
         if: ${{ !cancelled() && github.event.pull_request.head.repo.full_name == github.repository }}
         working-directory: head
+        env:
+          BASE_SHA: ${{ github.sha }}
         run: |
+          # Test what will merge, not a head that may be behind the base.
+          if ! git -c user.name=ci -c user.email=ci@invalid merge --no-ff --no-edit "$BASE_SHA"; then
+            echo "- (c) suite: FAIL -- the head does not merge cleanly with $DEFAULT_BRANCH at $BASE_SHA: merge it in and re-push" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "- (c) suite runs on the head merged with $DEFAULT_BRANCH at $BASE_SHA" >> "$GITHUB_STEP_SUMMARY"
           git config core.hooksPath .githooks
           rc=0
           python scripts/run_tests.py || rc=$?

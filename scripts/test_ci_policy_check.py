@@ -9,10 +9,13 @@ Run from scripts/:
       an ordinary project file does not, the tracked pre-push hook sources
       (.githooks/, tools/git-hooks/) flag by the hook's own rule
       while githooks/ and tools/other/ do not, and .githooks/ is still not
-      .github/ to is_github.
+      .github/ to is_github; a .claude/skills/ path that exists nowhere flags
+      (is_skill is load-bearing: is_policy() does not flag it) while a sibling
+      of .claude/skills/ does not.
   P2  end to end, as a subprocess, against a throwaway git repo: a branch
       touching only an ordinary file exits 0 with no POLICY line; one adding
-      .github/workflows/x.yml exits 1 and names it; one editing a path that
+      .github/workflows/x.yml exits 1 and names it; one adding and one
+      deleting a .claude/skills/ SKILL.md each exit 1 and name it; one editing a path that
       EXISTS under this checkout's scripts/ exits 1 (existence is judged
       against the checkout the script ships in, never the diff's repo); one
       pure-renaming that path exits 1 and names its OLD name (--no-renames:
@@ -58,8 +61,10 @@ def git(*args, cwd):
 
 
 def fixture_repo(tmp):
-    """master: f.txt. topic-plain edits it. topic-github adds
-    .github/workflows/x.yml. topic-scripts edits scripts/prepush_check.py
+    """master: f.txt and .claude/skills/old-zz/SKILL.md. topic-plain edits
+    f.txt. topic-github adds .github/workflows/x.yml. topic-skill-add adds
+    .claude/skills/new-zz/SKILL.md; topic-skill-del deletes old-zz's (neither
+    exists under THIS checkout). topic-scripts edits scripts/prepush_check.py
     (a path that exists under THIS checkout, which is what the classifier
     judges existence against). topic-rename pure-renames that file to
     scripts/moved_zz.py, a name that exists nowhere."""
@@ -78,11 +83,16 @@ def fixture_repo(tmp):
 
     commit("f.txt", "a\n", "c1")
     commit("scripts/prepush_check.py", "x = 1\n", "c2")
+    commit(".claude/skills/old-zz/SKILL.md", "old\n", "c3")
     for branch, rel in (("topic-plain", "f.txt"),
                         ("topic-github", ".github/workflows/x.yml"),
+                        ("topic-skill-add", ".claude/skills/new-zz/SKILL.md"),
                         ("topic-scripts", "scripts/prepush_check.py")):
         git("checkout", "-q", "-b", branch, "master", cwd=tmp)
         commit(rel, "changed\n", branch)
+    git("checkout", "-q", "-b", "topic-skill-del", "master", cwd=tmp)
+    git("rm", "-q", ".claude/skills/old-zz/SKILL.md", cwd=tmp)
+    git("commit", "-q", "-m", "topic-skill-del", cwd=tmp)
     git("checkout", "-q", "-b", "topic-rename", "master", cwd=tmp)
     git("mv", "scripts/prepush_check.py", "scripts/moved_zz.py", cwd=tmp)
     git("commit", "-q", "-m", "topic-rename", cwd=tmp)
@@ -116,8 +126,12 @@ class TestClassifier(unittest.TestCase):
                    ".githooks/pre-push",
                    "tools/git-hooks/pre-push-dispatcher",
                    "roles/senior-engineer.md",
-                   "graphs/lane.md"]
+                   "graphs/lane.md",
+                   ".claude/skills/new-zz/SKILL.md",  # exists nowhere: is_skill
+                   ".Claude/Skills/new-zz/x.md"]      # folded
         clean = ["projects/app/handler.py",
+                 ".claude/skills-notes.md",       # a sibling of skills/
+                 "skills/new_zz.md",              # new under top-level skills/: not policy
                  "scripts/does_not_exist_zz.py",  # new under scripts/: not policy
                  "docs/github.md",
                  "github/x",                      # no dot: not the workflows dir
@@ -132,6 +146,11 @@ class TestClassifier(unittest.TestCase):
         # .githooks/ flags above through is_policy; is_github's prefix must
         # still not match it (the claim the old `clean` entry carried).
         self.assertFalse(cpc.is_github(".githooks/pre-push"))
+        # The .claude/skills rule is load-bearing too: the hook does not flag
+        # a skill file that does not exist yet.
+        np = os.path.normcase(os.path.realpath(
+            os.path.join(ROOT, ".claude", "skills", "new-zz", "SKILL.md")))
+        self.assertFalse(checker(np), "is_policy() now flags new skills; retire is_skill")
 
 
 class TestEndToEnd(unittest.TestCase):
@@ -147,6 +166,14 @@ class TestEndToEnd(unittest.TestCase):
             self.assertEqual(code, 1, out)
             self.assertIn("POLICY: .github/workflows/x.yml", out)
             self.assertIn("RESULT: FAIL (1 policy path(s))", out)
+
+            code, out = run_checker(tmp, "topic-skill-add")
+            self.assertEqual(code, 1, out)
+            self.assertIn("POLICY: .claude/skills/new-zz/SKILL.md", out)
+
+            code, out = run_checker(tmp, "topic-skill-del")
+            self.assertEqual(code, 1, out)
+            self.assertIn("POLICY: .claude/skills/old-zz/SKILL.md", out)
 
             code, out = run_checker(tmp, "topic-scripts")
             self.assertEqual(code, 1, out)
