@@ -4,8 +4,10 @@
 # commands, always. Quoted spans are stripped first so a commit message
 # containing "push master" cannot false-deny (the earlier version friction lesson).
 # Residual, stated: a bare `git push` (no refspec) passes — the target
-# branch is not decidable from the args; propose-and-stop (S3) and
-# log-escape's push line carry it.
+# branch is not decidable from the args; §3's push rules carry it (a lane
+# PR's push after a green preflight, a per-target push approval, or a close
+# request's yes for the session's own non-default branches; the default
+# branch is human-executed under all of them), with log-escape's push line.
 #
 # 2026-08-24: extended to the `gh` binary. The gate was keyed to the word
 # "git", so `gh repo create --source . --remote origin --push` performed two

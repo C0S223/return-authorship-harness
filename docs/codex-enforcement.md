@@ -138,7 +138,8 @@ citation and author-check machinery while reporting the actual Codex binding. It
 refuses dirty or unpinned review work. Reviewers preserve the existing stamp format,
 verdicts and caps; the hub never authors their independent findings. `$cite-check`
 uses the existing checker. `$closeout` is operator-invoked only and uses the local
-host disposition and repository handoff; Stop records a turn end and never calls it.
+host disposition, writing a repository handoff only with no board or no memory connector;
+Stop records a turn end and never calls it.
 Native `wait`/`wait_agent` can collect results. Continuing, resuming or closing a
 child through `send_input`, `resume_agent` or `close_agent` uses the exact-call
 approval above; there is no blanket permission to send followups. Unknown control
