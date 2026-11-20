@@ -62,8 +62,8 @@ paraphrase-and-retry, and **escalation ends the run**: role file, § Run cap):
   there is no work order, and never touch another session's live files.
 - **Commit your own scope on the lane branch. Never branch, merge, push, or deploy.**
   Follow `roles/super-doer.md` § Rules for commit scope, branch restrictions and leaving
-  the working tree clean. Propose-and-stop still governs push: you present, the human
-  executes. Follow `graphs/lane.md` §4 for landing authority.
+  the working tree clean. Push is never yours: you present, and the push goes by
+  `CLAUDE.md` §3. Follow `graphs/lane.md` §4 for landing authority.
 - **You make no board write.** The board is remote and you hold no connector; the hub
   writes the note you return. An agent must never touch an approval verb.
 - **Do not commit files you did not create.**

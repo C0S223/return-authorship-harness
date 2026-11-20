@@ -2,7 +2,7 @@
 name: grill
 description: The hub questions the operator one fork at a time and carries out each ruling at once; a ruling that authorizes a build opens a lane. Fires when the operator asks to be grilled through a backlog of forks.
 machinery: [super-doer, senior-engineer, adversarial-reviewer, recall]
-outcome: Every fork is ruled and either carried out, turned into a lane, or handed to the operator as a command; the handoff lists what remains.
+outcome: Every fork is ruled and either carried out, turned into a lane, or handed to the operator as a command; the board lists what remains (a handoff, with no board or no memory connector).
 ---
 
 **What reads this:** a hub session whose operator asks to be grilled through open forks.
@@ -56,7 +56,7 @@ lane's desk are the record. With a connector, every step runs as written.
    with its `note` as one call, with `release_item(..., done=true)` in the same step
    ([`claim`](../.claude/skills/claim/SKILL.md) § Steps), `board_triage` with `notes` first for an untriaged row, notes
    capped at 300 characters. Tree changes: a lane per [`lane.md`](lane.md) step 1, never an edit in the main tree. Write one log commentary line per ruling with the operator's answer verbatim, and
-   add a handoff addendum every few rulings.
+   with no board or no memory connector, add a handoff addendum every few rulings.
 4. **A build ruling opens a lane.** A lane is a full run of [`lane.md`](lane.md), from its
    § When to run pre-work through its step 5. Two things this file adds:
    - **The grill continues during the lane.** Builder and reviewer dispatches run in the
