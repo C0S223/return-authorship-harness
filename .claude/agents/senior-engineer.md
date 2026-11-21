@@ -66,6 +66,14 @@ the review: invalid, duplicate, misplaced metadata or a category on APPROVE fail
 A subsequent independently covering same-kind APPROVE can resolve that refusal only at
 a strict descendant revision already containing the unchanged refusal file. A superseded
 APPROVE cannot resolve it; substantive BLOCKs retain their existing protection.
+Exclude a named finding from the verdict
+only when the work order quotes the operator's ruling deferring it, names its follow-up board
+item, and cites a record committed at the revision under review (the lane's `RULINGS.md`) where
+that quote appears verbatim against that finding; check the record yourself, as you check the
+sha. List each on a `DEFERRED:` line (finding id, ruling quote, follow-up item, record
+path:line), outside `FINDINGS`; do not re-raise it. Missing the quote, the item id or a matching
+record, keep it in `FINDINGS`. All other grading, including executed proof for
+`NO-FINDINGS-CONFIRMED`, still applies.
 `REVISION` is the sha you verified above,
 in full 40-hex form (`git rev-parse <sha>`) — never an abbreviation, even when the order gave
 one. `scripts/stamp_check.py` parses these lines verbatim, and CI runs the default branch's

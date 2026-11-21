@@ -63,8 +63,10 @@ Their "go" covers the PRs it names, nothing more.
 
 - Mark ready (`update_pull_request draft=false`). Do not subscribe to PR
   activity; the operator decides what this session watches.
-- Arm auto-merge only after `operator-merge` passes. Policy PRs: never; they
-  merge it themselves.
+- Arm auto-merge only with `python scripts/lane_ready.py <owner/repo> <number>`,
+  never another way; it marks a draft ready itself. Exit 1 refuses, with its
+  reason: a contract or policy PR, or a lane no senior-engineer APPROVE covers,
+  waits for their merge. Exit 2 is a surprise: report it.
 - A likely-stale draft lane: merge the default branch in, then print the push and
   run it only on their yes for that PR (`CLAUDE.md` §3). Do it in the lane's existing worktree, or a new one under
   `worktrees/` with its base named — never the main tree. Then re-run test 1:

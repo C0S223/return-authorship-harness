@@ -59,6 +59,7 @@ SAMPLES = [
     ("scripts/stamp_check.py", True),
     ("scripts/ci_policy_check.py", True),
     ("scripts/prepush_check.py", True),
+    ("scripts/lane_ready.py", True),
     ("scripts/log_filter.py", True),      # the session-close hook runs it
     ("scripts/run_tests.py", True),       # CI's gate runs the PR's copy
     ("scripts/cloud-setup.sh", True),     # arms the pre-push gate

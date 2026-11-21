@@ -16,6 +16,7 @@ AGENTS.override.md @OWNER
 /scripts/stamp_check.py @OWNER
 /scripts/ci_policy_check.py @OWNER
 /scripts/prepush_check.py @OWNER
+/scripts/lane_ready.py @OWNER
 /scripts/log_filter.py @OWNER
 /scripts/run_tests.py @OWNER
 /scripts/cloud-setup.sh @OWNER

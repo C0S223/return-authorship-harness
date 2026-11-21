@@ -21,9 +21,10 @@ def main():
     assert ci.flagged(paths, checker) == paths, 'Codex policy escaped operator review'
     assert (ROOT / 'AGENTS.md').read_bytes() == (ROOT / 'CLAUDE.md').read_bytes()
     original = subprocess.run(['git', '-C', str(ROOT), 'show',
-                              '0ae5e6f1bafeb3272a6e8349cae6e8de74e968c4'],
+                              'f2f5c14e52e153aeebfae20f8f687abb1624410f'],
                              capture_output=True)
-    # The pin is CLAUDE.md's blob (`git hash-object CLAUDE.md`), stable
+    # The pin is CLAUDE.md's blob (`git hash-object CLAUDE.md`; re-pinned for §3's
+    # lane_ready.py auto-merge clause), stable
     # whatever the merge method. Template clones need not retain this object. Where
     # it exists, ensure equal contracts did not both drift from the pinned one.
     if original.returncode == 0:
