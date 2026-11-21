@@ -180,6 +180,14 @@ class OverlapTests(unittest.TestCase):
                 self.assertEqual((code, out), (2, ""))
                 self.assertIn("fetch error", err)
 
+    def test_pr_file_limit_fails_closed(self):
+        self.pr([])
+        self.data[PR_FILES] = [[{"filename": "other"}] * 100 for _ in range(30)]
+        code, out, err = self.run_main("target")
+        self.assertEqual((code, out), (2, ""))
+        self.assertIn("fetch error", err)
+        self.assertIn("PR file limit reached", err)
+
     def test_gh_uses_only_get_and_pagination(self):
         pages = [[{"number": 7}], [{"number": 8}]]
         result = subprocess.CompletedProcess([], 0, stdout=json.dumps(pages))

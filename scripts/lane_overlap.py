@@ -77,8 +77,13 @@ def find_overlaps(repo, paths, fetcher=gh_fetch):
     try:
         for pr in items(root + "/pulls?state=open&per_page=100"):
             number = pr["number"]
-            add_files(f"PR #{number} {pr['head']['ref']}",
-                      items(f"{root}/pulls/{number}/files?per_page=100"))
+            endpoint = f"{root}/pulls/{number}/files?per_page=100"
+            files = list(items(endpoint))
+            # GitHub returns at most 3000 files for a PR, even with pagination.
+            # Refuse to label a potentially incomplete scan clear.
+            if len(files) >= 3000:
+                raise FetchError(f"{endpoint}: PR file limit reached")
+            add_files(f"PR #{number} {pr['head']['ref']}", files)
 
         metadata = pages(root)[0]
         default = quote(metadata["default_branch"], safe="")

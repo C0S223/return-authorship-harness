@@ -227,12 +227,13 @@ migration; the round caps and operator approvals below still apply.
 **Round caps.** **Code** and **prose** each get up to five rounds of their reviewer. A round is what
 this file elsewhere calls a swing. A delta re-review is the next round even without a new
 build, and takes its own `REPORT-SWING<N>.md` before dispatch. **Auto-repair:** when a
-BLOCK states an exact repair for every blocking condition, the hub applies those repairs as
+BLOCK that is not a REFUSE, and that neither the in-round close nor the wording-only close
+(below) fits, states an exact repair for every blocking condition, the hub applies those repairs as
 the next candidate, its commit message naming each condition, and dispatches the next round
 without asking the operator for the round. Every other gate on that candidate and dispatch
 stands: a spawn that asks (`CLAUDE.md` §2), a top-tier dispatch (Model routing), and a
-policy-path repair, which takes the approval `CLAUDE.md` §2 requires. The in-round close and the wording-only close below still apply
-where they fit. A REFUSE or BLOCK whose conditions lack an exact repair, or a BLOCK at round
+policy-path repair, which takes the approval `CLAUDE.md` §2 requires. Where the in-round close or the wording-only close fits, it applies
+instead. A REFUSE or BLOCK whose conditions lack an exact repair, or a BLOCK at round
 five, goes to the operator, who decides: another round, the operator's own merge of a policy lane, or stop. Past the cap on a
 desk-only lane, the hub may instead apply the reviewer's exact repairs, list each in the PR
 body as repaired and not re-reviewed, and ship it per step 4 for the operator's read and
@@ -258,7 +259,7 @@ commit message names each condition, runs `/cite-check` on each repaired file, a
 commits a new desk report, `REPORT-REPAIRS.md`, reading `repairs applied: C1..Cn at <first 8
 hex of that candidate>`; it never edits the reviewer's grill or an earlier report. A REFUSE
 goes to the operator; a condition outside that bound, or one with no exact repair, takes the
-in-round close or goes to the operator. The repair voids the BLOCK and no APPROVE covers the
+in-round close or auto-repair (Round caps), or goes to the operator. The repair voids the BLOCK and no APPROVE covers the
 head. The stamp line reads `Stamps: adversarial-reviewer BLOCK @<first 8 hex>, repairs
 applied at <first 8 hex>, not re-reviewed`, and the PR body lists each repair under "Not
 re-reviewed". Unless own-desk exclusion empties the subject (a desk-only lane), step 4's (b)
