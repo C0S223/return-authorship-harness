@@ -29,7 +29,9 @@ from pathlib import Path
 # Measured 2026-08-31 after the density trim: 14,406 bytes / 2,062 words, down
 # 14.4% from 16,823. The ceiling sits ~4% above that -- room for a genuine new
 # rule, not room for a paragraph of narrative.
-CEILING = 15_000
+CEILING = 15_100
+# Raised from 15,000 (total 15,050): §3's auto-merge clause names scripts/lane_ready.py
+# and its senior-engineer APPROVE; it rewrites the clause in place and retires no sentence.
 # Sections the tree cites by number; §7 is retired on purpose (contract-redesign `review.md`, adoption step 7).
 SECTIONS = ("0", "1", "2", "3", "4", "5", "6", "8", "9")
 

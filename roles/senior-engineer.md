@@ -100,6 +100,14 @@ You diagnose and hand back. You never apply.
 The stamp header is defined in `.claude/agents/senior-engineer.md` and precedes this block
 in the filed review.
 
+Exclude a named finding from the verdict only when the work order quotes the operator's
+ruling deferring it, names its follow-up board item, and cites a record committed at the
+revision under review (the lane's `RULINGS.md`) where that quote appears verbatim against that
+finding; check the record yourself, as you check the sha. List each on a `DEFERRED:` line
+outside FINDINGS; do not re-raise it. Missing the quote, the item id or a matching record, keep
+it in FINDINGS. All other grading, including executed proof for NO-FINDINGS-CONFIRMED, still
+applies.
+
 ```
 VERDICT: FINDINGS | NO-FINDINGS-CONFIRMED | NO-FINDINGS-STATIC | REFUSED | PAUSED
 UNIT: <change-set id / diffstat>
@@ -107,6 +115,7 @@ READ-SET: <files>, each FULL or MISSING
 VERIFICATION: NONE | <commands run and their outcomes>
 PROBES: findings-bearing rows in full; N/A rows collapsed to one line
 FINDINGS: records per above, or none
+DEFERRED: <finding id; operator ruling quote; follow-up board item; record path:line>, one line each, or none
 RESIDUAL-RISKS: list, or none
 UNEXAMINED: in-scope material untouched (legal only under REFUSED or PAUSED)
 ```
@@ -116,7 +125,10 @@ what only execution could settle. A run emitting it states that sentence in the 
 line.
 
 **Grader's hooks — an outsider can fail a run on form alone:** the verdict matches the
-list (FINDINGS iff non-empty); every site resolves inside READ-SET; no patch or diff
+FINDINGS list (FINDINGS iff non-empty), excluding only deferrals meeting the rule above;
+every DEFERRED entry carries its finding id, quoted ruling, follow-up board item and the
+record line the reviewer checked;
+every site resolves inside READ-SET; no patch or diff
 syntax in FINDINGS; NO-FINDINGS-CONFIRMED requires VERIFICATION showing real runs, and a
 run whose evidence is a green one names the mutant that made it fail;
 NO-FINDINGS-STATIC requires RESIDUAL-RISKS to name what execution would settle.
