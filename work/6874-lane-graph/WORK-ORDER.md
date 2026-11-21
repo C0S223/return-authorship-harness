@@ -1,6 +1,6 @@
 # Work order: lane 6874, lane graph and reviewers (base c693f70)
 
-Item: board 6874. Builder: hub. Policy lane: the operator granted the ten policy paths below for
+Item: board 6874. Builder: hub. Policy lane: the operator granted the fourteen policy paths below for
 this port, by name; the push, the PR and its ready mark are per-target approvals, and the
 operator merges.
 
@@ -29,10 +29,10 @@ later lane), and its paragraph on where harness changes land first.
 Policy (the grant): `graphs/lane.md`, `roles/senior-engineer.md`,
 `.claude/agents/senior-engineer.md`, `CLAUDE.md`, `AGENTS.md`, `.github/CODEOWNERS`,
 `.claude/skills/check-prs/SKILL.md`, `scripts/test_claude_md_budget.py`,
-`scripts/test_codex_support.py`, `scripts/test_codeowners.py`.
-
-New, not policy: `scripts/lane_ready.py`, `scripts/lane_overlap.py`,
-`scripts/test_lane_ready.py`, `scripts/test_lane_overlap.py`.
+`scripts/test_codex_support.py`, `scripts/test_codeowners.py`, and the four new scripts
+`scripts/lane_ready.py`, `scripts/lane_overlap.py`, `scripts/test_lane_ready.py`,
+`scripts/test_lane_overlap.py` (new files under `scripts/` count as policy once they exist,
+`.claude/hooks/policy-mutate.py:151-155`).
 
 Desk: `work/6874-lane-graph/`. Reviews: `grills/*-lane-6874-*`.
 
