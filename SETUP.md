@@ -125,7 +125,9 @@ this cannot work: GitHub does not let you approve your own pull request.
 Then tell me "saved", whether a not-enforced notice appeared, and who is on the bypass
 list.
 
-**Read it back yourself; do not rely on their report.** Run:
+**Read it back yourself; do not rely on their report.** This needs GitHub's `gh` tool,
+signed in. Without it, say that you could not read the ruleset back and that what follows
+rests on their report. With it, run:
 
     gh api repos/<owner>/<repo>/rulesets
     gh api repos/<owner>/<repo>/rules/branches/<default-branch>

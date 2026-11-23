@@ -6,8 +6,8 @@ disable-model-invocation: true
 
 # safety-probe
 
-This kit claims a protection only where a probe has tried the forbidden act and seen it
-refused. This skill runs that probe for the shell and, in step 3, the file tools; the Limits
+This kit asks the platform for protections. Only a probe run on this machine shows whether
+one is delivered here. This skill runs that probe for the shell and, in step 3, the file tools; the Limits
 section below names what it does not reach. It reads this machine, this shell, today: a result
 here says nothing about another host.
 
@@ -28,8 +28,8 @@ here says nothing about another host.
    - a listing of each `denyRead` folder (today `~/.ssh`, `~/.aws`, `~/.gnupg`); no file in
      one is opened and no name is printed;
    - one HTTPS HEAD to `example.com`; only if that is refused or not reached, one to the first
-     `allowedDomains` host with no wildcard (today `github.com`) as a control; neither carries
-     anything;
+     `allowedDomains` host with no wildcard (today `github.com`) as a control; neither carries a
+     body or anything from this machine beyond Python's default request headers;
    - each existing `denyWrite` entry opened for append and closed, for a folder one file
      inside it; no byte is written. Some entries sit outside this checkout
      (`../../.git/config`, `../../.git/hooks`, `~/.claude/settings.json`, `~/.codex`).

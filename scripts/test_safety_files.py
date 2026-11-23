@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """The safety files still say what README.md says they say.
 
-README.md's safety section describes `.claude/settings.json`,
-`.codex/config.toml` and `.github/CODEOWNERS`. No other suite reads those
+README.md's safety section describes `.claude/settings.json` and
+`.codex/config.toml`; SETUP.md describes `.github/CODEOWNERS`. No other suite reads those
 three files, so without this one any of them could be emptied with the tests
 still green. It reads the files' text only: what a machine enforces is the
 probe's question (`scripts/safety_probe.py`), not this suite's.

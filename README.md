@@ -14,12 +14,12 @@ act was refused.
 
 | Where the agent runs | Shell commands | What to know |
 |---|---|---|
-| macOS, Linux, WSL2 | Claude Code's sandbox: writes only inside the project and one git folder two levels up (the main checkout's, when this copy is a worktree), no writes to the protected paths below, no reads of `~/.ssh`, `~/.aws` or `~/.gnupg`, network only to the hosts listed in the settings | Linux and WSL2 need `bubblewrap` and `socat` installed. The settings ask Claude Code to refuse to start if the sandbox cannot. Starting proves nothing: only the probe's act rows do. On macOS the settings also turn on `enableWeakerNetworkIsolation`, which lets sandboxed commands reach the system's certificate service. It is on because a trial of these settings on a Mac, in the private copy this kit is drawn from, found `gh` failing certificate checks inside the sandbox without it and working with it. The record of that trial is not in this repository. The cost: Claude Code's settings reference says this "reduces security by opening a potential data exfiltration path through the trust service". |
+| macOS, Linux, WSL2 | Claude Code's sandbox: writes only inside the project and one git folder two levels up (the main checkout's, when this copy is a worktree; otherwise whatever `.git` folder sits two levels above the project, if there is one), no writes to the protected paths below, no reads of `~/.ssh`, `~/.aws` or `~/.gnupg`, network only to the hosts listed in the settings | Linux and WSL2 need `bubblewrap` and `socat` installed. The settings ask Claude Code to refuse to start if the sandbox cannot. Starting proves nothing: only the probe's act rows do. On macOS the settings also turn on `enableWeakerNetworkIsolation`, which lets sandboxed commands reach the system's certificate service. It is on because a trial of these settings on a Mac, in the source copy this kit is drawn from, found `gh` failing certificate checks inside the sandbox without it and working with it. The record of that trial is not in this repository. The cost: Claude Code's settings reference says this "reduces security by opening a potential data exfiltration path through the trust service". |
 | Native Windows | No sandbox exists | The settings ask Claude Code to refuse to start. Its sandboxing guide says that with this setting "Claude Code exits at startup on those machines". This kit has no run on Windows on record. Use WSL2 or a cloud session. |
-| A cloud session | Not contained inside the container | Claude Code's settings reference says a session in an Anthropic-hosted environment "can start anyway, with a warning, and doesn't enforce your `sandbox.filesystem` or `sandbox.network` rules". The one cloud session probed, with the private copy this kit is drawn from in November 2026, had a shell that wrote outside the project, opened the protected paths for writing and reached the network. Your own files are not there, and that is the protection. Treat anything you put in the container as readable by the agent. |
+| A cloud session | Not contained inside the container | Claude Code's settings reference says a session in an Anthropic-hosted environment "can start anyway, with a warning, and doesn't enforce your `sandbox.filesystem` or `sandbox.network` rules". The one cloud session probed, with the source copy this kit is drawn from, had a shell that wrote outside the project, opened the protected paths for writing and reached the network. Your own files are not there, and that is the protection. Treat anything you put in the container as readable by the agent. |
 
-Asked for wherever Claude Code loads these settings (the probe script does not test
-these):
+Asked for wherever Claude Code loads these settings (of these, the probe script tests
+only the sandbox's no-write list):
 
 - **File tools.** Deny rules stop the agent's Edit and Write tools changing the protected
   paths: `CLAUDE.md`, `AGENTS.md`, `README.md`, `.claude/`, `.codex/`, `.agents/`, `roles/`,
@@ -27,12 +27,16 @@ these):
   `safety-probe` skill has a hand check for these. The same paths are on the sandbox's
   no-write list, so where the sandbox runs, a shell command that would change a file under
   one of them, a git command included, should be refused; the probe's `protected-write`
-  rows test that. A pull request can still change `.github/`: your read of the diff guards
+  rows test that. Your yes does not lift a deny rule: where these hold, you make the
+  change yourself. A pull request can still change `.github/`: your read of the diff guards
   the test workflow.
-- **Prompts.** Starting another session or a schedule asks you first, through Claude Code's
-  own tools, unless you run in a mode that skips prompts. A session or schedule started
-  from a shell command is not caught. Remote triggers, browser scripting and the catch-all
-  agent are denied.
+- **Prompts.** These tools ask you first, unless you run in a mode that skips prompts:
+  `CronCreate`, the scheduled-task connector's create, update and run, and the remote
+  connector's create-trigger and create-session (exact names: `.claude/settings.json`). No
+  rule here covers a wake, a loop, any other sub-agent, or a session or schedule started
+  from a shell command. Denied outright: the `RemoteTrigger` tool, the remote connector's
+  send-later, watch-url and update-trigger, browser scripting and browser batches, the
+  catch-all agent, the `Workflow` tool and the `claude plugin` command.
 - **Your main branch.** A GitHub ruleset, which you set up in `SETUP.md`, makes every
   change to the main branch arrive as a pull request with the tests run on it. It does not
   decide who merges: an agent using your GitHub login can merge its own pull request,
@@ -81,14 +85,20 @@ it.
 - `CLAUDE.md` and `AGENTS.md`: the same contract under the two names the agents read.
   `AGENTS.md` is an exact copy, so its first line also reads `# CLAUDE.md`.
 - `.claude/settings.json`, `.codex/config.toml`: the platform protections this kit turns on.
+  The first also sets two environment values and runs the context-size reminder after
+  each tool call.
 - `scripts/safety_probe.py`: tries each forbidden act from the agent's shell and reports
   PASS, FAIL or SKIP.
-- `.claude/agents/`, `roles/`: two reviewers and two helpers you can ask for.
+- `.claude/agents/`, `roles/`: two reviewers and two helpers you can ask for. `roles/` holds
+  longer prompts for three of them and one for drafting a pull request description.
 - `.claude/skills/`, `graphs/grill.md`: optional workflows.
 - `scripts/run_tests.py`: runs the tests; GitHub runs it on each pull request.
 - `scripts/cloud-setup.sh`: for a cloud environment's setup script, if you choose to use
   it. It makes `python` resolve to `python3` and does nothing else.
 - `docs/`: notes and past decisions. Some describe machinery this kit no longer has.
+- `work/`, `grills/`, `handoffs/`: history from earlier versions, much of it about that
+  machinery. `work/6877-safety-cut/REPORT.md` says what changes for a copy made from an
+  earlier version.
 
 ## License
 

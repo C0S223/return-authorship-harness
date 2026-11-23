@@ -23,7 +23,7 @@ binding cannot make that promise.** `Bash` can write. So the role file's one-fil
 write bound (§ Output) is enforced here by **prose, not by the grant**.
 
 What still holds depends on the machine (`README.md`, What protects you, and what does
-not): where Claude Code's sandbox runs, your shell cannot write outside the repo or to the
+not): where Claude Code's sandbox runs, your shell cannot write outside the repo (one git folder two levels up excepted) or to the
 protected paths in `.claude/settings.json`, and reaches only the hosts in `.claude/settings.json`. Where it does not run,
 nothing stops your shell. A refusal is stop-and-escalate, never reword-and-retry.
 

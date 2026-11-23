@@ -54,8 +54,10 @@ the run**: role file, § Run cap):
   them too. A safety
   file changes only on the human's yes and by pull request (`CLAUDE.md`, Ask first and Git).
   Ask and stop.
-- **Writes outside the checkout and network sends** are refused only where the sandbox
-  runs.
+- **Writes outside the checkout and network sends:** where the sandbox runs it refuses
+  shell writes outside the checkout (one git folder two levels up excepted) and network
+  sends to any host not listed in `.claude/settings.json`. Sends to the listed hosts go
+  through. Where it does not run, nothing refuses either.
 
 **Prose only** (nothing mechanical stops you; hold these hardest):
 - **Git never-items** (force push, tags, default-branch push, repository settings):

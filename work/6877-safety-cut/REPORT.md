@@ -32,7 +32,8 @@ This change brings the kit to the same state.
   pushed branches on a close request, which the new contract does not allow without a yes
   for the push.
 - **`README.md`** says the macOS network setting rests on a trial whose record is not in
-  this repository, and that the one cloud probe was run with the source copy.
+  this repository, and that the one cloud probe was run with the source copy. It gives no
+  date for either.
 
 ## What changes for someone already using this kit
 
@@ -54,12 +55,33 @@ This change brings the kit to the same state.
   `11 suites: 11 pass, 0 fail, 0 skip (3 tests skipped inside 1 passing suites)`. The three
   skipped tests need a user the operating system can refuse; this run was as root.
 - `CLAUDE.md` and `AGENTS.md` are byte-identical (2,732 bytes each).
-- `.claude/settings.json` parses, and `scripts/test_safety_files.py` pins it to what
-  `README.md` says.
-- A search of every added line for private names, ids, paths and dates found none.
+- `.claude/settings.json` parses. `scripts/test_safety_files.py` pins its sandbox switches,
+  the three unreadable folders, the denied and asked tools and the protected paths. It
+  does not pin the extra write path, the macOS network setting or which hosts are listed.
+- A search of every added line for private repository and account names, people, board and
+  work ids, session ids and machine paths found none. That a private source copy exists is
+  said on purpose, here and in `README.md`.
+- The two action pins in `.github/workflows/ci.yml` match the tags their comments name.
 - A search of the live files for the names of the removed files found two places: the two
   records under `docs/adr/`, which carry a note saying so, and `SETUP.md` step 2, which
   names the old push hook in order to have it removed.
+
+## Review
+
+`grills/2026-11-23-lane-6877-ar.md` is one independent read of the first revision of this
+change, for leaks and for claims stronger than the files deliver. It refused that revision
+on four points. The commit after it repairs those four and the smaller findings listed
+below; the reviewer has not read the repairs.
+
+The revision named in the review's header is not in this history. It differed from the
+first commit here in one sentence of this report, which named two source-copy paths: the
+review's first point. That sentence was reworded before anything was published, so the
+review's line numbers still fit the first commit.
+
+- Repaired: its conditions 1 to 4; new defects 1, 2, 3, 6, 8, 9, 11 and 12; notes 1, 4, 5
+  and 10.
+- Left as found: new defects 4, 5, 7 and 10, and notes 2, 3, 6, 7, 8 and 9. None is a leak
+  or a protection claim.
 
 ## What was not checked
 
