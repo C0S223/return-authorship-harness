@@ -1,5 +1,7 @@
 # ADR 0001: Park the text-classifying guard layer
 
+**Note:** the hooks, scripts and numbered contract sections this record cites have since been removed, and the handoff and review files it cites are not in this repository. It is kept as history; `CLAUDE.md` and `README.md` say what holds now.
+
 Status: Accepted, by operator ruling on 2026-10-15 ("Park it, revert F28"; ADR and binding:
 "First lane after merge", "Yes, with the ADR"; scope, every text-classifying gate, not
 only the origin-ref rows: "Whole layer"; lane: "Go"). The rulings are in that day's action log.

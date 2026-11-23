@@ -1,23 +1,6 @@
-# Named policy paths need the operator's review; `operator-merge` gates the rest. Binds only when the
-# ruleset turns on require_code_owner_review. Last matching line wins. Checked by
-# scripts/test_codeowners.py.
+# The safety files. Binds only when the ruleset turns on require_code_owner_review.
 CLAUDE.md @OWNER
 AGENTS.md @OWNER
-AGENTS.override.md @OWNER
-/.claude/** @OWNER
-/.agents/** @OWNER
-/.codex/** @OWNER
-/roles/** @OWNER
-/graphs/** @OWNER
-/.githooks/** @OWNER
-/tools/git-hooks/** @OWNER
+/.claude/settings.json @OWNER
+/.codex/config.toml @OWNER
 /.github/** @OWNER
-/README.md @OWNER
-/scripts/stamp_check.py @OWNER
-/scripts/ci_policy_check.py @OWNER
-/scripts/prepush_check.py @OWNER
-/scripts/lane_ready.py @OWNER
-/scripts/log_filter.py @OWNER
-/scripts/run_tests.py @OWNER
-/scripts/cloud-setup.sh @OWNER
-/docs/enforcement/CLAUDE.md @OWNER

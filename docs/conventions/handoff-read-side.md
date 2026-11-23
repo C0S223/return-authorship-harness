@@ -30,7 +30,7 @@ Two corollaries:
 
 **Say which lines you resolved.**
 
-## What reads this back (§6 — write implies read)
+## What reads this back (write implies read)
 
 - **The compaction resume hook** points the session at this convention and its own
   handoff; a fresh session is pointed here by whoever hands it a handoff. Both are instructions to read,

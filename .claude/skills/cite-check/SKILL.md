@@ -53,7 +53,7 @@ cites resolve against that checkout. `--quiet` hides the resolved-cite and MEASU
 - **`#`, `>` and `//` line prefixes are stripped from sources**, so a quote from a hook's
   comment block or a blockquote matches.
 - **The tool lints the checkout, not the merge result.** A cite into a file that exists on
-  the default branch but not on the lane branch reads `file not found`; verify it there with
+  the default branch but not on the working branch reads `file not found`; verify it there with
   `git show origin/<default>:<path>` and leave it.
 
 ## What it cannot judge

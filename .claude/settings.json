@@ -5,10 +5,6 @@
   },
   "permissions": {
     "deny": [
-      "CronCreate",
-      "CronDelete",
-      "ScheduleWakeup",
-      "mcp__scheduled-tasks__*",
       "RemoteTrigger",
       "mcp__claude-code-remote__send_later",
       "mcp__claude-code-remote__watch_url",
@@ -22,140 +18,88 @@
       "mcp__claude-in-chrome__browser_batch",
       "Bash(claude plugin:*)",
       "Agent(general-purpose)",
-      "Workflow"
+      "Workflow",
+      "Edit(/.claude/**)",
+      "Edit(/.codex/**)",
+      "Edit(/.agents/**)",
+      "Edit(/.githooks/**)",
+      "Edit(/.github/**)",
+      "Edit(/roles/**)",
+      "Edit(/graphs/**)",
+      "Edit(**/CLAUDE.md)",
+      "Edit(**/AGENTS.md)",
+      "Edit(**/AGENTS.override.md)",
+      "Edit(/README.md)",
+      "Edit(/.git/config)",
+      "Edit(/.git/hooks/**)"
     ],
     "ask": [
+      "CronCreate",
+      "mcp__scheduled-tasks__create_scheduled_task",
+      "mcp__scheduled-tasks__update_scheduled_task",
+      "mcp__scheduled-tasks__run_scheduled_task",
+      "mcp__claude-code-remote__create_trigger",
+      "mcp__Claude_Code_Remote__create_trigger",
       "mcp__claude-code-remote__create_session",
       "mcp__Claude_Code_Remote__create_session"
-    ]
+    ],
+    "blockWritesOutsideWorkingDirectories": true
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "allowWrite": [
+        "../../.git"
+      ],
+      "denyWrite": [
+        "./.claude",
+        "./.codex",
+        "./.agents",
+        "./.githooks",
+        "./.github",
+        "./roles",
+        "./graphs",
+        "./CLAUDE.md",
+        "./AGENTS.md",
+        "./README.md",
+        "./.git/config",
+        "./.git/hooks",
+        "../../.git/config",
+        "../../.git/hooks",
+        "~/.claude/settings.json",
+        "~/.codex",
+        "./AGENTS.override.md"
+      ],
+      "denyRead": [
+        "~/.ssh",
+        "~/.aws",
+        "~/.gnupg"
+      ]
+    },
+    "network": {
+      "allowedDomains": [
+        "github.com",
+        "api.github.com",
+        "codeload.github.com",
+        "objects.githubusercontent.com",
+        "pypi.org",
+        "files.pythonhosted.org",
+        "registry.npmjs.org"
+      ],
+      "allowLocalBinding": true
+    },
+    "enableWeakerNetworkIsolation": true
   },
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/preflight.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-prompt.py\"",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Write|Edit|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-mutate.py\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/filetool-scope.py\"",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-mutate.py\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/git-guard.py\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/net-post.py\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/env-global.py\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/shell-scope.py\"",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Agent|Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/spawn-roster.py\"",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "^mcp__(claude-code-remote|Claude_Code_Remote)__(create|update)_trigger$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/trigger-shape.py\""
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/log-escape.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\"",
-            "timeout": 10
-          },
-          {
-            "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/auto-compact/check.sh\"",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|PowerShell|Write|Edit|NotebookEdit|Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-integrity.py\"",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/log-escape.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\"",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|PowerShell|Write|Edit|NotebookEdit|Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-integrity.py\"",
             "timeout": 10
           }
         ]
@@ -163,42 +107,12 @@
     ],
     "SessionStart": [
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\"",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "startup|resume",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/run-python.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\" \"$CLAUDE_PROJECT_DIR/.claude/hooks/policy-integrity.py\"",
-            "timeout": 10
-          }
-        ]
-      },
-      {
         "matcher": "compact",
         "hooks": [
           {
             "type": "command",
             "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/auto-compact/resume.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 2; }; bash \"$f\"",
             "timeout": 10
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "f=\"$CLAUDE_PROJECT_DIR/.claude/hooks/session-close.sh\"; [ -f \"$f\" ] || { echo \"Safety check file missing: $f. If this folder was moved or renamed, restart Claude Code from it; otherwise restore the file with git.\" >&2; exit 1; }; bash \"$f\"",
-            "timeout": 15
           }
         ]
       }
