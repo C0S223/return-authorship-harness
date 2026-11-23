@@ -63,13 +63,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # crashes dict()).
 SKIP = {}
 
-# Extra argv for suites that need it. Same key shape as SKIP. The pre-push
-# gate is NOT armed in a fresh checkout of this tree, so the read-back runs
-# without --require-installed and reports "not installed" loudly as WARN. The
-# change that arms the gate adds
-#     "scripts/test_prepush_install.py": ["--require-installed"],
-# here in the same commit: the flag and the fact travel together, or "armed and
-# since deleted" reads green from the one file whose job is noticing.
+# Extra argv for suites that need it. Same key shape as SKIP.
 ARGS = {}
 
 # Suites that write FIXED paths and therefore cannot overlap with anything,
@@ -84,16 +78,8 @@ SERIAL = {}
 # Ordering only: every suite still runs, and a name here that no longer exists
 # is simply never submitted. Longest first by one-at-a-time wall time.
 FIRST = [
-    "tests/test_auto_compact.sh",
-    "scripts/test_policy_integrity.py",
     "scripts/test_run_tests.py",
-    "tests/test_session_close.py",
-    "scripts/test_stamp_check.py",
-    "tests/test_policy_mutate.py",
-    "tests/test_policy_batch.py",
-    "tests/test_log_escape.py",
-    "scripts/test_gate_decisions.py",
-    "tests/test_prepush_pin.py",
+    "tests/test_auto_compact.sh",
 ]
 
 
@@ -237,17 +223,9 @@ def run_one(cmd, cwd):
     limit = timeout_secs()
     start = time.time()
     with tempfile.TemporaryFile() as out:
-        # Gate suites describe the host column; under a cloud marker every gate
-        # answers cloud-off and ten suites go red. Strip the
-        # markers unless RUN_TESTS_TARGET asks for a cloud column.
         env = dict(os.environ)
-        target = env.get("RUN_TESTS_TARGET", "host")
-        if target == "host":
-            env.pop("CLAUDE_CODE_REMOTE", None); env.pop("HARNESS_BOUNDARY", None)
         # A suite inside a package imports it by name; see import_root.
-        # Prepended, never replaced, so a caller's PYTHONPATH survives. Here
-        # rather than in main() because prepush_check.py runs checks through
-        # this function and must run them the same way.
+        # Prepended, never replaced, so a caller's PYTHONPATH survives.
         root = import_root(cwd)
         if root:
             old = env.get("PYTHONPATH")
@@ -306,8 +284,7 @@ def main():
 
     def record(status, r, secs, out):
         # A suite counts whole, but unittest's own skips inside it are named:
-        # without pyyaml the workflow-shape tests skip and the suite still
-        # passes, and a summary reading "0 skip" hid that (finish-run probe P2).
+        # a summary reading "0 skip" would hide them.
         n = tests_skipped(out)
         print("%s %-60s %6.1fs%s" % (status, r, secs,
                                      "  (%d tests skipped)" % n if n else ""))
@@ -316,10 +293,8 @@ def main():
     pooled = []  # (relpath, cmd, cwd) - submit order
     serial = []  # same shape, drained one at a time after the pool
 
-    # The shell suite is submitted FIRST, not run last: at ~45s it is the
-    # longest single suite in the tree, so a pool that starts it last finishes
-    # when it finishes. Not python, run via bash when available, never dropped
-    # silently.
+    # The shell suite joins the pool; FIRST decides when it starts. Not python,
+    # run via bash when available, never dropped silently.
     if os.path.exists(sh):
         r = rel(sh)
         bash = shutil.which("bash")
@@ -339,7 +314,7 @@ def main():
                os.path.dirname(path))
         (serial if r in SERIAL else pooled).append(job)
 
-    # FIRST (which leads with the shell suite) in its order, then path order;
+    # FIRST in its order, then path order;
     # the sort is stable, so the rest keep path order.
     rank = {r: i for i, r in enumerate(FIRST)}
     pooled.sort(key=lambda j: rank.get(j[0], len(FIRST)))

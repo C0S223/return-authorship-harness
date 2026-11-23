@@ -4,9 +4,9 @@ You are here because `check.sh` nudged: context is near the ceiling. At your
 next stopping point — a module boundary, a green verify, any safe pause — do
 this in order.
 
-Deliberately **not** filed under `.claude/hooks/`. That is a policy path, and a
-document meant to be revised should not need a human-typed unlock every time it
-is corrected. Only the two `.sh` files live there.
+Deliberately **not** filed under `.claude/hooks/`. The settings deny the agent that
+folder, and a document meant to be revised should not need the human's hand every
+time it is corrected. Only the two `.sh` files live there.
 
 ## 1. Write the handoff
 
@@ -25,7 +25,7 @@ A handoff carries:
   survives a compaction and whether it survives a restart.
 - **State**, each item verifiable: git (commits, what is unpushed, why), the
   board, whatever ladder or ledger this tree tracks, and open PRs with their
-  check state (`gh pr list`; `gh pr checks <n>` for `gate` and `operator-merge`).
+  check state (`gh pr list`; `gh pr checks <n>` for `gate`).
   Name the command that re-checks it rather than asserting the number.
 - **What must not be re-derived.** Conclusions already paid for.
 - **Open, unassigned, and unfiled.** Including the things you deliberately did

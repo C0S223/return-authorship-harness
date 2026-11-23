@@ -1,6 +1,6 @@
 # Model routing and task difficulty: research notes
 
-Reference notes gathered on 2026-10-16 while designing the cascade rule in `graphs/lane.md`. They are background, not rules: the rule is in `graphs/lane.md`. Several figures come from secondary sources; each claim links its source, so check the original before relying on a number.
+Reference notes gathered on 2026-10-16 while designing a model-cascade rule for a build workflow this kit no longer has. They are background, not rules. Several figures come from secondary sources; each claim links its source, so check the original before relying on a number.
 
 ## 1. Difficulty can be measured as human time
 METR measures difficulty as how long a skilled human takes, and capability as each model's

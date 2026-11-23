@@ -1,5 +1,7 @@
 # ADR 0002: Lift the settings denies the operator never ruled or ruled against
 
+**Note:** the hooks, scripts and numbered contract sections this record cites have since been removed. It is kept as history; `CLAUDE.md` and `README.md` say what holds now.
+
 Status: Accepted as the template default, by operator ruling on 2026-10-21. The same ruling
 was made first in a downstream copy on 2026-10-20 and is ported here.
 Decided by: the operator. Hub defaults, not ruled: both `javascript_tool` entries (Chrome's and

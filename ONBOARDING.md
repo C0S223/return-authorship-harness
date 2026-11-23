@@ -1,46 +1,35 @@
 # ONBOARDING.md: a short tour after setup
 
 **Reader: the agent.** Start this whenever the person says **onboard me**, at any time,
-even after they have taken or skipped the tour before. A new session also offers it, in one
-session-start line, only when all three hold: the push guard is armed (`APPROVED_ORIGIN_URL`
-in `.githooks/pre-push` is no longer the `OWNER/REPO` placeholder), the marker
-`.agent-log/onboarded` does not exist (at the root of the main checkout, or of the current
-checkout if that is a different folder), and the session is not a cloud session (managed
-cloud or a self-hosted runner). A cloud session never shows that line, but **onboard me** works there too. If setup is not finished, say so and offer
-`SETUP.md` instead.
-
-**Ending or skipping.** At the end of step 7, or as soon as they say **skip** at any point,
-create the empty file `.agent-log/onboarded` (and the folder, if it is missing) at the root
-of the **main checkout**: the folder that holds the `.git` folder named by
-`git rev-parse --git-common-dir` (run it at the current checkout's root; a relative answer
-is relative to that root), or, if git fails or names no `.git` folder, the current
-checkout's root. If that folder is not the current checkout's root (you are in a lane
-worktree), writing there is a write outside this checkout (`CLAUDE.md` §2): first ask them
-one yes/no question naming the exact path; on yes, create it there; on no, create it at the
-current checkout's root and tell them the offer may come back in other worktrees. Tell them
-plainly: a marker in the main checkout covers it and every lane worktree, so the offer does
-not come back in each new worktree; it only stops the offer at the start of new sessions; it
-lives in a folder Git ignores, so nothing is committed; a fresh clone has no marker and
-offers the tour again at each new session until it is ended or skipped there; and saying
-**onboard me** still starts the tour.
+even after they have taken or skipped the tour before. Nothing offers it unasked. If setup
+is not finished, say so and offer `SETUP.md` instead. If they say **skip**, stop.
 
 **How to run it.** One step per turn, one idea per message, in plain words. End each step
 with a plain question and wait for the reply. Put each step's text in your last message,
 after your final tool call: the desktop app folds away text written between tool calls
 (`SETUP.md` says the same). This tour adds no rule. It points to the files that hold the
-rules; where it seems to disagree with `CLAUDE.md` or a graph file, those win, and you say so.
+rules; where it seems to disagree with `CLAUDE.md` or `README.md`, those win, and you say so.
 
 ## 1. What this is for
 
-Say, in two sentences: this repository keeps them in charge of AI coding agents, with a
-written rulebook (`CLAUDE.md`), safety checks that stop risky actions, and a review before
-any change lands. It is mostly a control layer: from here the agent starts work sessions in
-their other repositories, and this one changes rarely, each change needing their named
-approval (`CLAUDE.md`, Purpose).
+Say, in two sentences: this repository keeps them in charge of an AI coding agent, with a
+short written contract (`CLAUDE.md`) and a settings file that turns on the protections
+Claude Code and Codex already have. They decide; the agent proposes, builds and reports
+honestly.
+
+Ask: "Shall I show you what protects your files, and what does not?"
+
+## 2. What protects them
+
+Explain, from `README.md`'s safety section and their own probe result if they ran one: the
+protection is the platform's sandbox and permission rules, plus the rule on their main
+branch on GitHub. The contract is text: the agent is told to follow it, and nothing makes
+it. Name plainly what is not protected on their machine. Never call a machine protected on
+the strength of the settings file alone.
 
 Ask: "Shall I show you how we make decisions together?"
 
-## 2. The grill: deciding (`graphs/grill.md`)
+## 3. Deciding (`graphs/grill.md`)
 
 Explain: when there are decisions to make, the agent asks **one question at a time**, each
 as a small pop-out with two to four choices. They rule; the agent carries out each ruling
@@ -51,66 +40,40 @@ for their own words first, with no choices offered.
 
 Ask: "Any questions, or shall I show you how building works?"
 
-## 3. The lane: building (`graphs/lane.md`)
+## 4. Building
 
-Explain: when they approve a build, the agent makes a separate copy of the repository on a
-branch named `lane-<number>` and writes a one-screen **work order** under
-`work/<number>-<name>/`: the goal, the check that decides it is done, the only files
-that may change, and a guess at how long a person would take, which helps pick the model.
-A **builder** agent (`super-doer`) does the work and commits just those
-files. Then a different agent reviews it, **by kind**: code goes to `senior-engineer`, which
-runs the tests; writing that an agent will read later, or that goes public, goes to
-`adversarial-reviewer`. Each saves its review under `grills/`; an approving review is a
-**stamp** tied to the exact version it read (`scripts/stamp_check.py`).
+Explain: the agent works on a branch, never on the main branch. When the work is ready it
+runs the tests and asks them. On their yes it pushes the branch and opens a **draft** pull
+request: a proposed change, not yet merged. They read it and they merge it. The agent asks
+before it edits the contract, the settings or the GitHub workflow files, and a pull request
+that changes one says so in the first line of its description (`CLAUDE.md`, Ask first and
+Git).
 
-Ask: "Does that make sense so far?"
+Ask: "Shall I say what the check on a pull request means?"
 
-## 4. The lane: landing
+## 5. The check on a pull request
 
-Explain: before it asks GitHub to take the change, the agent runs the same three checks
-GitHub will run (`ci_policy_check`, `stamp_check`, `run_tests`; `graphs/lane.md` step 4).
-It then opens a **draft** pull request: a proposed change, not yet merged. Who merges:
+Explain: every pull request shows one check, `gate`. It runs the tests
+(`python3 scripts/run_tests.py`). Green means they passed. Red means one failed: they click
+**Details** next to it to see which, and the agent says what that test checks. The agent
+never edits a test to turn it green.
 
-- No policy file changed and both checks green: the agent marks it ready and it merges itself.
-- A policy file changed (the rulebook, `README.md`, the safety checks; full list in
-  `docs/enforcement/CLAUDE.md`, Policy paths): the push and the pull request each need
-  their yes, and **they** merge it on GitHub.
+Ask: "Shall I tell you about the reviewers you can ask for?"
 
-Ask: "Shall I say a word about which AI models do the work?"
+## 6. Reviewers, when they want one
 
-## 5. Which models do the work
-
-Explain: the session they are talking to now is the **hub**. It runs the grill and the lane
-and hands work to helper agents. Run it on a mid-range, reasonably strong model at medium
-effort, one good at coordinating work. They need not pick the helpers' models (a model they name for a job wins): the lane does,
-starting builders on the lightest model that fits, running each reviewer one level above its
-builder, and moving up a level when a review fails. The strongest level waits for their yes
-(`graphs/lane.md`, Model routing).
-
-Ask: "Shall I explain what the red marks on a pull request mean?"
-
-## 6. Red checks on a pull request
-
-Explain: every pull request shows two checks. `gate` passes when the tests pass and a
-reviewer stamp sits under `grills/`. `operator-merge` checks for policy files. A red mark is
-**expected** when:
-
-- the pull request is still a draft: both checks are red until it is marked ready;
-- `operator-merge` is red: a policy file changed, so they merge it;
-- `gate` was red on setup's own pull request, because no reviewer had approved it yet.
-
-Red `gate` on a ready lane pull request is **not** expected: the agent stops and tells them,
-and does not push fixes to turn it green. To see why a check failed, they click **Details**
-next to it, then **Summary**, as in setup.
+Explain: their own read of the pull request is the review. When they want an independent
+check they can ask for a reviewer agent: `senior-engineer` reads code and runs the tests,
+`adversarial-reviewer` reads documents. Each writes its review as a file under `grills/`.
+A reviewer never reviews its own work. The agent is told to ask before it starts one; no
+setting makes it.
 
 Ask: "Ready to pick the first thing to work on?"
 
-## 7. Start a grill: the first thing to work on
+## 7. The first thing to work on
 
-This step is a grill run: follow `graphs/grill.md` from here, its action-log line included.
-Ask for their goals first, frame-first (`graphs/grill.md` step 2): what they want to get
-done, what done would look like, and what they are afraid of getting wrong. Offer no choices
-and no recommendation yet; get their own words and their own list onto the record. Then end
-by asking, as one pop-out, which of the things they named to work on first, the choices in
-their words. Nothing starts until they pick; a build then opens a lane (step 3 above).
-Then create the marker file (Ending or skipping, above).
+Follow `graphs/grill.md` from here. Ask for their goals first, frame-first
+(`graphs/grill.md` step 2): what they want to get done, what done would look like, and what
+they are afraid of getting wrong. Offer no choices and no recommendation yet; get their own
+words and their own list. Then end by asking, as one pop-out, which of the things they named
+to work on first, the choices in their words. Nothing starts until they pick.

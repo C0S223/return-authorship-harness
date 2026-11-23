@@ -6,9 +6,9 @@ project_doc_fallback_filenames = ["CLAUDE.md"]
 [sandbox_workspace_write]
 network_access = false
 
-# Continuation via write_stdin does not repeat PreToolUse. Use legacy shell.
 [features]
-# Disabled until the operator authorizes the activation probes in CODEX-SETUP.md.
+# This kit ships no Codex hooks. The two unified_exec values below are kept from an
+# earlier version and are not tested here.
 hooks = false
 unified_exec = false
 unified_exec_tty = false
