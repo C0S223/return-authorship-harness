@@ -92,8 +92,8 @@ review's line numbers still fit the first commit.
 - **Stale comments.** A few code comments still cite numbered contract sections
   (`.claude/hooks/auto-compact/check.sh`, `scripts/run_tests.py`, `scripts/test_run_tests.py`,
   `scripts/test_graph_pointers.py`). They change no behaviour and match the source copy.
-- **Older files under `work/`, `grills/` and `handoffs/`** describe the removed machinery.
-  They are history and are left as they are.
+- **Older files under `work/`, `grills/` and `handoffs/`** described the removed machinery.
+  A later change removed them; they remain in this repository's git history.
 
 ## For whoever merges this
 
